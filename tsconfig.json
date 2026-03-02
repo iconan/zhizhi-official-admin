@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./internal/tsconfig/node.json",
+  "include": [
+    "vitest.config.ts",
+    "apps/**/*",
+    "packages/**/*",
+    "internal/**/*",
+    "scripts/**/*",
+    "docs/**/*",
+    "playground/**/*"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.turbo/**"
+  ]
+}
