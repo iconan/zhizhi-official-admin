@@ -9,5 +9,9 @@ export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
     name: import.meta.env.VITE_APP_TITLE,
+    // 启用后端模式，菜单/路由依赖后端返回的菜单树
+    accessMode: 'backend',
+    // 后端菜单未包含 dashboard 时，登录后重定向到 IAM 菜单
+    defaultHomePath: '/iam/menu',
   },
 });
