@@ -10,6 +10,7 @@ export namespace MenuApi {
     parent_id: string | null;
     name: string;
     code: string;
+    menu_type: 'directory' | 'menu' | 'button' | 'link';
     path: string;
     component?: string;
     icon?: string;

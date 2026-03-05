@@ -1,57 +1,67 @@
 import { baseRequestClient, requestClient } from '#/api/request';
 
+const IAM_PREFIX = '/v1/admin/iam';
+
 export namespace AuthApi {
   /** 登录接口参数 */
   export interface LoginParams {
-    password?: string;
-    username?: string;
+    login: string;
+    password: string;
   }
 
   /** 登录接口返回值 */
   export interface LoginResult {
     accessToken: string;
+    refreshToken?: string;
   }
 
   export interface RefreshTokenResult {
-    data: string;
-    status: number;
+    accessToken: string;
+  }
+
+  export interface PermissionsResult {
+    permissions: string[];
+    roles: string[];
   }
 }
 
-/**
- * 登录
- */
+/** 登录 */
 export async function loginApi(data: AuthApi.LoginParams) {
-  return requestClient.post<AuthApi.LoginResult>('/auth/login', data, {
+  const res = await requestClient.post<{
+    access_token: string;
+    refresh_token?: string;
+  }>(`${IAM_PREFIX}/login`, data, {
     withCredentials: true,
   });
+
+  return {
+    accessToken: res.access_token,
+    refreshToken: res.refresh_token,
+  } satisfies AuthApi.LoginResult;
 }
 
-/**
- * 刷新accessToken
- */
-export async function refreshTokenApi() {
-  return baseRequestClient.post<AuthApi.RefreshTokenResult>(
-    '/auth/refresh',
-    null,
-    {
-      withCredentials: true,
-    },
+/** 刷新 accessToken */
+export async function refreshTokenApi(refreshToken?: string) {
+  const res = await baseRequestClient.post<{ access_token: string }>(
+    `${IAM_PREFIX}/refresh`,
+    refreshToken ? { refresh_token: refreshToken } : null,
+    { withCredentials: true },
   );
+
+  return { accessToken: res.access_token } satisfies AuthApi.RefreshTokenResult;
 }
 
-/**
- * 退出登录
- */
+/** 退出登录 */
 export async function logoutApi() {
-  return baseRequestClient.post('/auth/logout', null, {
+  return baseRequestClient.post(`${IAM_PREFIX}/logout`, null, {
     withCredentials: true,
   });
 }
 
-/**
- * 获取用户权限码
- */
+/** 获取权限码 */
 export async function getAccessCodesApi() {
-  return requestClient.get<string[]>('/auth/codes');
+  const res = await requestClient.get<AuthApi.PermissionsResult>(
+    `${IAM_PREFIX}/me/permissions`,
+  );
+  return res?.permissions ?? [];
 }

@@ -9,6 +9,7 @@ import {
   InputNumber,
   message,
   Modal,
+  Select,
   Space,
   Switch,
   Table,
@@ -16,7 +17,14 @@ import {
   Typography,
 } from 'ant-design-vue';
 import type { FormInstance } from 'ant-design-vue';
-import { createMenu, deleteMenu, fetchMenus, updateMenu, updateMenuStatus } from '#/api';
+import {
+  createMenu,
+  deleteMenu,
+  fetchMenuTree,
+  fetchMenus,
+  updateMenu,
+  updateMenuStatus,
+} from '#/api';
 import type { MenuApi } from '#/api/core/menu';
 
 const loading = ref(false);
@@ -33,6 +41,7 @@ const formModel = reactive({
   parent_id: null as string | null,
   name: '',
   code: '',
+  menu_type: 'menu' as MenuApi.MenuItem['menu_type'],
   path: '',
   component: '',
   icon: '',
@@ -46,10 +55,20 @@ const formModel = reactive({
 const rules = {
   name: [{ required: true, message: '请输入名称' }],
   code: [{ required: true, message: '请输入编码' }],
+  menu_type: [{ required: true, message: '请选择类型' }],
   path: [{ required: true, message: '请输入路径' }],
   sort: [{ required: true, type: 'number', message: '请输入排序' }],
   status: [{ required: true, message: '请选择状态' }]
 };
+
+const typeOptions: { label: string; value: MenuApi.MenuItem['menu_type'] }[] = [
+  { label: '目录', value: 'directory' },
+  { label: '菜单', value: 'menu' },
+  { label: '按钮', value: 'button' },
+  { label: '外链', value: 'link' }
+];
+
+const typeLabelMap = new Map(typeOptions.map((opt) => [opt.value, opt.label] as const));
 
 async function loadList() {
   loading.value = true;
@@ -57,10 +76,14 @@ async function loadList() {
     const res = await fetchMenus({ include_disabled: includeDisabled.value });
     const items = res?.items || [];
     tableData.value = items;
-    treeOptions.value = items;
   } finally {
     loading.value = false;
   }
+}
+
+async function loadTree() {
+  const tree = await fetchMenuTree({ include_disabled: includeDisabled.value });
+  treeOptions.value = tree;
 }
 
 function resetForm(initial?: Partial<MenuApi.MenuItem>) {
@@ -68,6 +91,7 @@ function resetForm(initial?: Partial<MenuApi.MenuItem>) {
   formModel.parent_id = initial?.parent_id ?? null;
   formModel.name = initial?.name ?? '';
   formModel.code = initial?.code ?? '';
+  formModel.menu_type = initial?.menu_type ?? 'menu';
   formModel.path = initial?.path ?? '';
   formModel.component = initial?.component ?? '';
   formModel.icon = initial?.icon ?? '';
@@ -126,6 +150,7 @@ async function submit() {
       parent_id: formModel.parent_id,
       name: formModel.name,
       code: formModel.code,
+      menu_type: formModel.menu_type,
       path: formModel.path,
       component: formModel.component,
       icon: formModel.icon,
@@ -145,7 +170,7 @@ async function submit() {
     }
 
     drawerVisible.value = false;
-    await loadList();
+    await Promise.all([loadList(), loadTree()]);
   } finally {
     submitting.value = false;
   }
@@ -156,12 +181,19 @@ watch(includeDisabled, async () => {
 });
 
 onMounted(async () => {
-  await loadList();
+  await Promise.all([loadList(), loadTree()]);
 });
 
 const columns = [
   { title: '名称', dataIndex: 'name' },
   { title: '编码', dataIndex: 'code' },
+  {
+    title: '类型',
+    dataIndex: 'menu_type',
+    width: 120,
+    customRender: ({ record }: { record: MenuApi.MenuItem }) =>
+      typeLabelMap.get(record.menu_type) ?? record.menu_type
+  },
   { title: '路径', dataIndex: 'path' },
   { title: '组件', dataIndex: 'component' },
   { title: '权限码', dataIndex: 'permission_code' },
@@ -173,8 +205,8 @@ const columns = [
     customRender: ({ record }: { record: MenuApi.MenuItem }) => (
       <Switch
         checked={record.status === 'active'}
-        checkedChildren="启用"
-        unCheckedChildren="禁用"
+        checkedChildren="已启用"
+        unCheckedChildren="已禁用"
         onChange={(val: boolean) => handleStatusChange(record, val)}
       />
     )
@@ -242,6 +274,13 @@ const columns = [
         <Form.Item label="编码" name="code">
           <Input v-model:value="formModel.code" placeholder="请输入编码" />
         </Form.Item>
+        <Form.Item label="类型" name="menu_type">
+          <Select
+            v-model:value="formModel.menu_type"
+            :options="typeOptions"
+            placeholder="请选择类型"
+          />
+        </Form.Item>
         <Form.Item label="路径" name="path">
           <Input v-model:value="formModel.path" placeholder="/path" />
         </Form.Item>
@@ -262,8 +301,8 @@ const columns = [
             v-model:checked="formModel.status"
             :checked-value="'active'"
             :un-checked-value="'disabled'"
-            checked-children="启用"
-            un-checked-children="禁用"
+            checked-children="已启用"
+            un-checked-children="已禁用"
           />
         </Form.Item>
         <Form.Item label="权限码" name="permission_code">
