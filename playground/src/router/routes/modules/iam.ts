@@ -50,6 +50,16 @@ const routes: RouteRecordRaw[] = [
         },
         component: () => import('#/views/iam/user/list.vue'),
       },
+      {
+        path: '/iam/permission',
+        name: 'IamPermission',
+        meta: {
+          title: '权限点管理',
+          icon: 'mdi:shield-key-outline',
+          ignoreAccess: true,
+        },
+        component: () => import('#/views/iam/permission/list.vue'),
+      },
     ],
   },
 ];

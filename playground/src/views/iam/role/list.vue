@@ -1,3 +1,289 @@
+<script lang="ts" setup>
+import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
+
+import { Page, useVbenDrawer } from '@vben/common-ui';
+import { Button, message, Tag } from 'ant-design-vue';
+import { nextTick, onMounted, ref } from 'vue';
+
+import { useVbenForm, z } from '#/adapter/form';
+import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import {
+  bindRolePermissions,
+  createRole,
+  fetchRoles,
+  type IamRole,
+  updateRole,
+  updateRoleStatus,
+} from '#/api/iam/role';
+import { fetchPermissions, type IamPermission } from '#/api/iam/permission';
+
+type RoleStatus = IamRole['status'];
+
+const [FormDrawer, formDrawerApi] = useVbenDrawer({ destroyOnClose: true });
+const [BindDrawer, bindDrawerApi] = useVbenDrawer({ destroyOnClose: true });
+
+const currentRole = ref<IamRole | null>(null);
+const bindTarget = ref<IamRole | null>(null);
+const permissionOptions = ref<{ label: string; value: string }[]>([]);
+
+const [RoleForm, roleFormApi] = useVbenForm({
+  showDefaultActions: false,
+  schema: [
+    {
+      component: 'Input',
+      fieldName: 'name',
+      label: '名称',
+      rules: z.string().min(1, '请输入名称').max(80, '过长'),
+    },
+    {
+      component: 'Input',
+      fieldName: 'code',
+      label: '编码',
+      rules: z.string().min(1, '请输入编码').max(80, '过长'),
+    },
+    {
+      component: 'Input',
+      fieldName: 'description',
+      label: '描述',
+      componentProps: { type: 'textarea', rows: 3 },
+      rules: z.string().max(200, '过长').optional(),
+    },
+    {
+      component: 'Input',
+      fieldName: 'org_id',
+      label: '所属组织ID',
+      componentProps: { allowClear: true },
+      rules: z.string().max(200, '过长').optional(),
+    },
+  ],
+});
+
+const [BindForm, bindFormApi] = useVbenForm({
+  showDefaultActions: false,
+  schema: [
+    {
+      component: 'Select',
+      fieldName: 'permission_codes',
+      label: '权限点',
+      componentProps: {
+        mode: 'multiple',
+        options: permissionOptions,
+        placeholder: '选择权限点编码',
+        allowClear: true,
+        showSearch: true,
+        optionFilterProp: 'label',
+      },
+      rules: z.array(z.string()).min(1, '至少选择1个权限点'),
+    },
+  ],
+});
+
+const onActionClick: OnActionClickFn<IamRole> = ({ code, row }) => {
+  switch (code) {
+    case 'edit':
+      openForm(row);
+      break;
+    case 'status':
+      toggleStatus(row);
+      break;
+    case 'bind':
+      openBind(row);
+      break;
+    default:
+      break;
+  }
+};
+
+function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
+  return [
+    { field: 'name', title: '名称', minWidth: 160 },
+    { field: 'code', title: '编码', minWidth: 160 },
+    { field: 'description', title: '描述', minWidth: 220 },
+    { field: 'org_id', title: '组织ID', minWidth: 160 },
+    {
+      field: 'status',
+      title: '状态',
+      width: 120,
+      slots: { default: 'status' },
+    },
+    {
+      title: '操作',
+      field: 'operation',
+      fixed: 'right',
+      width: 240,
+      showOverflow: false,
+      cellRender: {
+        name: 'CellOperation',
+        options: [
+          { code: 'bind', text: '绑定权限' },
+          { code: 'status', text: '切换状态' },
+          'edit',
+        ],
+        attrs: { onClick: onActionClickFn },
+      },
+    },
+  ];
+}
+
+const [Grid, gridApi] = useVbenVxeGrid({
+  gridOptions: {
+    columns: getColumns(onActionClick),
+    height: 'auto',
+    keepSource: true,
+    pagerConfig: { enabled: false },
+    proxyConfig: {
+      enabled: true,
+      autoLoad: false,
+      ajax: {
+        query: async () => {
+          try {
+            const items = await fetchRoles();
+            return items;
+          } catch (error) {
+            console.error('[IAM Role] fetchRoles failed', error);
+            return [];
+          }
+        },
+      },
+      response: {
+        result: ({ response }: any) => response,
+      },
+    } as any,
+    rowConfig: { keyField: 'role_id' },
+    toolbarConfig: {
+      custom: true,
+      export: false,
+      refresh: true,
+      zoom: true,
+    },
+  } as VxeTableGridOptions,
+});
+
+onMounted(async () => {
+  await loadPermissionOptions();
+  nextTick(() => gridApi.query());
+});
+
+async function loadPermissionOptions() {
+  try {
+    const list = await fetchPermissions({ limit: 500, offset: 0 });
+    permissionOptions.value = list.map((item: IamPermission) => ({
+      label: `${item.code}（${item.name}）`,
+      value: item.code,
+    }));
+  } catch (error) {
+    console.error('[IAM Role] fetchPermissions failed', error);
+  }
+}
+
+function onCreate() {
+  openForm();
+}
+
+function openForm(row?: IamRole) {
+  currentRole.value = row ?? null;
+  formDrawerApi.open();
+  nextTick(() => {
+    roleFormApi.resetForm();
+    if (row) roleFormApi.setValues(row);
+  });
+}
+
+async function onSubmitRole() {
+  const { valid } = await roleFormApi.validate();
+  if (!valid) return;
+  formDrawerApi.lock();
+  const values = await roleFormApi.getValues<IamRole>();
+  try {
+    if (currentRole.value?.role_id) {
+      await updateRole(currentRole.value.role_id, values as any);
+      message.success('更新成功');
+    } else {
+      await createRole(values as any);
+      message.success('创建成功');
+    }
+    formDrawerApi.close();
+    gridApi.query();
+  } finally {
+    formDrawerApi.unlock();
+  }
+}
+
+function renderStatus(status: RoleStatus) {
+  const map: Record<RoleStatus, { text: string; color: string }> = {
+    active: { text: '已启用', color: 'green' },
+    disabled: { text: '已禁用', color: 'red' },
+  } as const;
+  return map[status];
+}
+
+function toggleStatus(row: IamRole) {
+  const nextStatus: RoleStatus = row.status === 'active' ? 'disabled' : 'active';
+  const hide = message.loading({ content: '正在更新状态', duration: 0 });
+  updateRoleStatus(row.role_id, nextStatus)
+    .then(() => {
+      message.success('状态已更新');
+      gridApi.query();
+    })
+    .finally(() => hide());
+}
+
+function openBind(row: IamRole) {
+  bindTarget.value = row;
+  bindDrawerApi.open();
+  nextTick(() => {
+    bindFormApi.resetForm();
+    bindFormApi.setValues({ permission_codes: [] });
+  });
+}
+
+async function onSubmitBind() {
+  const { valid } = await bindFormApi.validate();
+  if (!valid || !bindTarget.value) return;
+  bindDrawerApi.lock();
+  const values = await bindFormApi.getValues<{ permission_codes: string[] }>();
+  try {
+    await bindRolePermissions(bindTarget.value.role_id, values.permission_codes);
+    message.success('绑定成功');
+    bindDrawerApi.close();
+  } finally {
+    bindDrawerApi.unlock();
+  }
+}
+</script>
+
 <template>
-  <div class="p-4">角色管理开发中</div>
+  <Page auto-content-height>
+    <FormDrawer :title="currentRole ? '编辑角色' : '新增角色'">
+      <RoleForm class="mx-4" layout="vertical" />
+      <template #footer>
+        <div class="flex justify-end gap-2 pr-4 pb-2">
+          <Button @click="formDrawerApi.close()">取消</Button>
+          <Button type="primary" @click="onSubmitRole">保存</Button>
+        </div>
+      </template>
+    </FormDrawer>
+
+    <BindDrawer :title="`绑定权限 - ${bindTarget?.name ?? ''}`">
+      <BindForm class="mx-4" layout="vertical" />
+      <template #footer>
+        <div class="flex justify-end gap-2 pr-4 pb-2">
+          <Button @click="bindDrawerApi.close()">取消</Button>
+          <Button type="primary" @click="onSubmitBind">保存</Button>
+        </div>
+      </template>
+    </BindDrawer>
+
+    <Grid>
+      <template #toolbar-tools>
+        <Button type="primary" @click="onCreate">新增角色</Button>
+      </template>
+
+      <template #status="{ row }">
+        <Tag :color="renderStatus(row.status).color">
+          {{ renderStatus(row.status).text }}
+        </Tag>
+      </template>
+    </Grid>
+  </Page>
 </template>
