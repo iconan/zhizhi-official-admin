@@ -1,19 +1,22 @@
 <script lang="ts" setup>
 import type { VbenFormSchema } from '#/adapter/form';
 
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 import { useVbenForm, z } from '#/adapter/form';
 import { componentKeys } from '#/router/routes';
 
 import { createMenu, fetchMenus, updateMenu } from '#/api/iam/menu';
-import type { IamMenu, MenuType } from '#/api/iam/menu';
+import { fetchPermissions, type IamPermission } from '#/api/iam/permission';
+import type { IamMenu } from '#/api/iam/menu';
 
 import { getMenuTypeOptions } from '../data';
 
 const emit = defineEmits<{ success: [] }>();
 const formData = ref<IamMenu>();
+
+const permissionOptions = ref<{ label: string; value: string }[]>([]);
 
 const schema: VbenFormSchema[] = [
   {
@@ -95,10 +98,16 @@ const schema: VbenFormSchema[] = [
     componentProps: { allowClear: true },
   },
   {
-    component: 'Input',
+    component: 'Select',
     fieldName: 'permission_code',
     label: '权限码',
-    componentProps: { allowClear: true },
+    componentProps: {
+      allowClear: true,
+      showSearch: true,
+      optionFilterProp: 'label',
+      options: permissionOptions,
+      placeholder: '从已有权限点选择',
+    },
   },
   {
     component: 'InputNumber',
@@ -143,6 +152,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onOpenChange(isOpen) {
     if (isOpen) {
       const data = drawerApi.getData<IamMenu>();
+      loadPermissionOptions();
       if (data) {
         formData.value = data;
         formApi.setValues(data);
@@ -157,6 +167,22 @@ const [Drawer, drawerApi] = useVbenDrawer({
 const drawerTitle = computed(() =>
   formData.value?.menu_id ? '编辑菜单' : '新增菜单',
 );
+
+onMounted(() => {
+  loadPermissionOptions();
+});
+
+async function loadPermissionOptions() {
+  try {
+    const list = await fetchPermissions({ limit: 500, offset: 0 });
+    permissionOptions.value = list.map((item: IamPermission) => ({
+      label: `${item.code}（${item.name}）`,
+      value: item.code,
+    }));
+  } catch (error) {
+    console.error('[IAM Menu] fetchPermissions failed', error);
+  }
+}
 
 async function onSubmit() {
   const { valid } = await formApi.validate();

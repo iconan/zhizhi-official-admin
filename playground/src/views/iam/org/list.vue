@@ -8,11 +8,16 @@ import { nextTick, onMounted, ref } from 'vue';
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { createOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
+import { fetchAdminUsers, type IamAdminUser } from '#/api/iam/user';
 
 type OrgStatus = IamOrg['status'];
 
 const [OrgDrawer, orgDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 const currentOrg = ref<IamOrg | null>(null);
+
+const ownerOptions = ref<{ label: string; value: string }[]>([]);
+const orgOptions = ref<{ label: string; value: string }[]>([]);
+const orgTreeOptions = ref<any[]>([]);
 
 const [OrgForm, orgFormApi] = useVbenForm({
   showDefaultActions: false,
@@ -24,17 +29,35 @@ const [OrgForm, orgFormApi] = useVbenForm({
       rules: z.string().min(1, '请输入名称').max(100, '过长'),
     },
     {
-      component: 'Input',
+      component: 'Select',
       fieldName: 'owner_id',
-      label: '负责人ID',
-      componentProps: { allowClear: true },
+      label: '负责人',
+      componentProps: {
+        allowClear: true,
+        showSearch: true,
+        optionFilterProp: 'label',
+        options: ownerOptions,
+        placeholder: '选择负责人',
+        style: { width: '100%' },
+        dropdownMatchSelectWidth: false,
+      },
       rules: z.string().max(200, '过长').optional(),
     },
     {
-      component: 'Input',
+      component: 'TreeSelect',
       fieldName: 'parent_id',
-      label: '上级组织ID',
-      componentProps: { allowClear: true },
+      label: '上级组织',
+      componentProps: {
+        allowClear: true,
+        treeData: orgTreeOptions,
+        fieldNames: { label: 'label', value: 'value', children: 'children' },
+        showSearch: true,
+        treeDefaultExpandAll: true,
+        placeholder: '选择上级组织',
+        filterTreeNode: true,
+        style: { width: '100%' },
+        dropdownMatchSelectWidth: false,
+      },
       rules: z.string().max(200, '过长').optional(),
     },
     {
@@ -48,14 +71,20 @@ const [OrgForm, orgFormApi] = useVbenForm({
       component: 'InputNumber',
       fieldName: 'max_members',
       label: '最大成员数',
-      componentProps: { min: 0, max: 999999 },
+      componentProps: { min: 0, max: 999999, style: { width: '100%' } },
     },
     {
-      component: 'Input',
+      component: 'Select',
       fieldName: 'entitled_regions',
-      label: '授权区域(逗号分隔)',
-      componentProps: { allowClear: true },
-      rules: z.string().max(500, '过长').optional(),
+      label: '授权区域',
+      componentProps: {
+        mode: 'tags',
+        allowClear: true,
+        tokenSeparators: [',', '，', ' '],
+        placeholder: '可输入或选择多个区域',
+        style: { width: '100%' },
+      },
+      rules: z.array(z.string()).max(50, '过多').optional(),
     },
   ],
 });
@@ -75,10 +104,19 @@ const onActionClick: OnActionClickFn<IamOrg> = ({ code, row }) => {
 
 function getColumns(onActionClickFn: OnActionClickFn<IamOrg>) {
   return [
-    { field: 'name', title: '名称', minWidth: 180 },
-    { field: 'org_id', title: 'ID', minWidth: 200 },
-    { field: 'parent_id', title: '上级ID', minWidth: 200 },
-    { field: 'owner_id', title: '负责人ID', minWidth: 200 },
+    { field: 'name', title: '名称', minWidth: 180, treeNode: true },
+    {
+      field: 'parent_id',
+      title: '上级组织',
+      minWidth: 200,
+      formatter: ({ cellValue }) => orgLabel(cellValue),
+    },
+    {
+      field: 'owner_id',
+      title: '负责人',
+      minWidth: 200,
+      formatter: ({ cellValue }) => ownerLabel(cellValue),
+    },
     { field: 'max_members', title: '最大成员', width: 120 },
     {
       field: 'status',
@@ -127,11 +165,18 @@ const [Grid, gridApi] = useVbenVxeGrid({
       response: { result: ({ response }: any) => response },
     } as any,
     rowConfig: { keyField: 'org_id' },
+    treeConfig: {
+      rowField: 'org_id',
+      parentField: 'parent_id',
+      transform: true,
+      expandAll: true,
+    },
     toolbarConfig: { custom: true, export: false, refresh: true, zoom: true },
   } as VxeTableGridOptions,
 });
 
-onMounted(() => {
+onMounted(async () => {
+  await loadSelectOptions();
   nextTick(() => gridApi.query());
 });
 
@@ -141,10 +186,7 @@ function openDrawer(row?: IamOrg) {
   nextTick(() => {
     orgFormApi.resetForm();
     if (row) {
-      const regions = Array.isArray(row.entitled_regions)
-        ? row.entitled_regions.join(',')
-        : (row as any).entitled_regions || '';
-      orgFormApi.setValues({ ...row, entitled_regions: regions });
+      orgFormApi.setValues({ ...row });
     }
   });
 }
@@ -177,6 +219,62 @@ async function onSubmitOrg() {
   } finally {
     orgDrawerApi.unlock();
   }
+}
+
+async function loadSelectOptions() {
+  try {
+    const [admins, orgs] = await Promise.all([
+      fetchAdminUsers({ limit: 200, offset: 0, is_active: true }),
+      fetchOrgs({ limit: 200, offset: 0, status: 'active' }),
+    ]);
+    ownerOptions.value = admins
+      .filter((item: IamAdminUser) => item.is_active)
+      .map((item: IamAdminUser) => ({
+        label: `${item.name || item.email} (${item.admin_user_id.slice(0, 8)})`,
+        value: item.admin_user_id,
+      }));
+    orgOptions.value = orgs
+      .filter((item: IamOrg) => item.status === 'active')
+      .map((item: IamOrg) => ({
+        label: `${item.name} (${item.org_id.slice(0, 8)})`,
+        value: item.org_id,
+      }));
+    orgTreeOptions.value = buildOrgTree(orgs);
+  } catch (error) {
+    console.error('[IAM Org] load select options failed', error);
+  }
+}
+
+function ownerLabel(id?: string | null) {
+  if (!id) return '';
+  return ownerOptions.value.find((item) => item.value === id)?.label ?? id;
+}
+
+function orgLabel(id?: string | null) {
+  if (!id) return '';
+  return orgOptions.value.find((item) => item.value === id)?.label ?? id;
+}
+
+function buildOrgTree(list: IamOrg[]) {
+  const nodes: Record<string, any> = {};
+  list.forEach((item) => {
+    nodes[item.org_id] = nodes[item.org_id] || {};
+    nodes[item.org_id] = {
+      value: item.org_id,
+      label: `${item.name}`,
+      children: nodes[item.org_id].children || [],
+    };
+  });
+  const roots: any[] = [];
+  list.forEach((item) => {
+    const node = nodes[item.org_id];
+    if (item.parent_id && nodes[item.parent_id]) {
+      nodes[item.parent_id].children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
 }
 
 function renderStatus(status: OrgStatus) {

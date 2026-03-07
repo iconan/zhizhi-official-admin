@@ -16,6 +16,7 @@ import {
   updateRoleStatus,
 } from '#/api/iam/role';
 import { fetchPermissions, type IamPermission } from '#/api/iam/permission';
+import { fetchOrgs, type IamOrg } from '#/api/iam/org';
 
 type RoleStatus = IamRole['status'];
 
@@ -25,6 +26,8 @@ const [BindDrawer, bindDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 const currentRole = ref<IamRole | null>(null);
 const bindTarget = ref<IamRole | null>(null);
 const permissionOptions = ref<{ label: string; value: string }[]>([]);
+const orgOptions = ref<{ label: string; value: string }[]>([]);
+const orgTreeOptions = ref<any[]>([]);
 
 const [RoleForm, roleFormApi] = useVbenForm({
   showDefaultActions: false,
@@ -49,10 +52,20 @@ const [RoleForm, roleFormApi] = useVbenForm({
       rules: z.string().max(200, '过长').optional(),
     },
     {
-      component: 'Input',
+      component: 'TreeSelect',
       fieldName: 'org_id',
-      label: '所属组织ID',
-      componentProps: { allowClear: true },
+      label: '所属组织',
+      componentProps: {
+        allowClear: true,
+        showSearch: true,
+        treeDefaultExpandAll: true,
+        treeData: orgTreeOptions,
+        placeholder: '选择组织',
+        style: { width: '100%' },
+        dropdownMatchSelectWidth: false,
+        filterTreeNode: (input: string, node: any) =>
+          (node?.label as string)?.toLowerCase()?.includes(input.toLowerCase()),
+      },
       rules: z.string().max(200, '过长').optional(),
     },
   ],
@@ -68,6 +81,8 @@ const [BindForm, bindFormApi] = useVbenForm({
       componentProps: {
         mode: 'multiple',
         options: permissionOptions,
+        style: { width: '100%' },
+        dropdownMatchSelectWidth: false,
         placeholder: '选择权限点编码',
         allowClear: true,
         showSearch: true,
@@ -99,7 +114,12 @@ function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
     { field: 'name', title: '名称', minWidth: 160 },
     { field: 'code', title: '编码', minWidth: 160 },
     { field: 'description', title: '描述', minWidth: 220 },
-    { field: 'org_id', title: '组织ID', minWidth: 160 },
+    {
+      field: 'org_id',
+      title: '组织',
+      minWidth: 200,
+      formatter: ({ cellValue }) => orgLabel(cellValue),
+    },
     {
       field: 'status',
       title: '状态',
@@ -160,7 +180,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
 });
 
 onMounted(async () => {
-  await loadPermissionOptions();
+  await Promise.all([loadPermissionOptions(), loadOrgOptions()]);
   nextTick(() => gridApi.query());
 });
 
@@ -174,6 +194,46 @@ async function loadPermissionOptions() {
   } catch (error) {
     console.error('[IAM Role] fetchPermissions failed', error);
   }
+}
+
+async function loadOrgOptions() {
+  try {
+    const list = await fetchOrgs({ limit: 200, offset: 0, status: 'active' });
+    orgOptions.value = list.map((item: IamOrg) => ({
+      label: `${item.name} (${item.org_id.slice(0, 8)})`,
+      value: item.org_id,
+    }));
+    orgTreeOptions.value = buildOrgTree(list);
+  } catch (error) {
+    console.error('[IAM Role] fetchOrgs failed', error);
+  }
+}
+
+function orgLabel(id?: string | null) {
+  if (!id) return '';
+  return orgOptions.value.find((item) => item.value === id)?.label ?? id;
+}
+
+function buildOrgTree(list: IamOrg[]) {
+  const nodes: Record<string, any> = {};
+  list.forEach((item) => {
+    nodes[item.org_id] = nodes[item.org_id] || {};
+    nodes[item.org_id] = {
+      value: item.org_id,
+      label: `${item.name}`,
+      children: nodes[item.org_id].children || [],
+    };
+  });
+  const roots: any[] = [];
+  list.forEach((item) => {
+    const node = nodes[item.org_id];
+    if (item.parent_id && nodes[item.parent_id]) {
+      nodes[item.parent_id].children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
 }
 
 function onCreate() {
