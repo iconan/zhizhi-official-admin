@@ -16,7 +16,8 @@ const [OrgDrawer, orgDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 const currentOrg = ref<IamOrg | null>(null);
 
 const ownerOptions = ref<{ label: string; value: string }[]>([]);
-const orgOptions = ref<{ label: string; value: string }[]>([]);
+const orgOptions = ref<{ label: string; value: string }[]>([]); // active orgs for form selects
+const orgOptionsAll = ref<{ label: string; value: string }[]>([]); // all orgs for label mapping
 const orgTreeOptions = ref<any[]>([]);
 
 const [OrgForm, orgFormApi] = useVbenForm({
@@ -224,22 +225,23 @@ async function onSubmitOrg() {
 async function loadSelectOptions() {
   try {
     const [admins, orgs] = await Promise.all([
-      fetchAdminUsers({ limit: 200, offset: 0, is_active: true }),
-      fetchOrgs({ limit: 200, offset: 0, status: 'active' }),
+      fetchAdminUsers({ limit: 200, offset: 0 }),
+      fetchOrgs({ limit: 200, offset: 0 }),
     ]);
-    ownerOptions.value = admins
-      .filter((item: IamAdminUser) => item.is_active)
-      .map((item: IamAdminUser) => ({
-        label: `${item.name || item.email} (${item.admin_user_id.slice(0, 8)})`,
-        value: item.admin_user_id,
-      }));
-    orgOptions.value = orgs
-      .filter((item: IamOrg) => item.status === 'active')
-      .map((item: IamOrg) => ({
-        label: `${item.name} (${item.org_id.slice(0, 8)})`,
-        value: item.org_id,
-      }));
-    orgTreeOptions.value = buildOrgTree(orgs);
+    ownerOptions.value = admins.map((item: IamAdminUser) => ({
+      label: `${item.name || item.email} (${item.admin_user_id.slice(0, 8)})`,
+      value: item.admin_user_id,
+    }));
+    const activeOrgs = orgs.filter((item: IamOrg) => item.status === 'active');
+    orgOptions.value = activeOrgs.map((item: IamOrg) => ({
+      label: `${item.name} (${item.org_id.slice(0, 8)})`,
+      value: item.org_id,
+    }));
+    orgOptionsAll.value = orgs.map((item: IamOrg) => ({
+      label: `${item.name} (${item.org_id.slice(0, 8)})`,
+      value: item.org_id,
+    }));
+    orgTreeOptions.value = buildOrgTree(activeOrgs);
   } catch (error) {
     console.error('[IAM Org] load select options failed', error);
   }
@@ -252,7 +254,7 @@ function ownerLabel(id?: string | null) {
 
 function orgLabel(id?: string | null) {
   if (!id) return '';
-  return orgOptions.value.find((item) => item.value === id)?.label ?? id;
+  return orgOptionsAll.value.find((item) => item.value === id)?.label ?? id;
 }
 
 function buildOrgTree(list: IamOrg[]) {
@@ -287,13 +289,22 @@ function renderStatus(status: OrgStatus) {
 
 function toggleStatus(row: IamOrg) {
   const nextStatus: OrgStatus = row.status === 'active' ? 'disabled' : 'active';
-  const hide = message.loading({ content: '正在更新状态', duration: 0 });
-  updateOrgStatus(row.org_id, nextStatus)
-    .then(() => {
-      message.success('状态已更新');
-      gridApi.query();
-    })
-    .finally(() => hide());
+
+  const doUpdate = () => {
+    const hide = message.loading({ content: '正在更新状态', duration: 0 });
+    updateOrgStatus(row.org_id, nextStatus)
+      .then(() => {
+        message.success('状态已更新');
+        gridApi.query();
+      })
+      .catch((error) => {
+        console.error('[IAM Org] update status failed', error);
+        message.error('更新失败');
+      })
+      .finally(() => hide());
+  };
+
+  doUpdate();
 }
 </script>
 

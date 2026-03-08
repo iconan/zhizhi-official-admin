@@ -27,7 +27,8 @@ const [BindDrawer, bindDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 const currentRole = ref<IamRole | null>(null);
 const bindTarget = ref<IamRole | null>(null);
 const permissionOptions = ref<{ label: string; value: string }[]>([]);
-const orgOptions = ref<{ label: string; value: string }[]>([]);
+const orgOptions = ref<{ label: string; value: string }[]>([]); // active orgs for forms
+const orgOptionsAll = ref<{ label: string; value: string }[]>([]); // all orgs for label mapping
 const orgTreeOptions = ref<any[]>([]);
 
 const [RoleForm, roleFormApi] = useVbenForm({
@@ -271,12 +272,17 @@ async function loadPermissionOptions() {
 
 async function loadOrgOptions() {
   try {
-    const list = await fetchOrgs({ limit: 200, offset: 0, status: 'active' });
-    orgOptions.value = list.map((item: IamOrg) => ({
+    const list = await fetchOrgs({ limit: 200, offset: 0 });
+    const activeOrgs = list.filter((item) => item.status === 'active');
+    orgOptions.value = activeOrgs.map((item: IamOrg) => ({
       label: `${item.name} (${item.org_id.slice(0, 8)})`,
       value: item.org_id,
     }));
-    orgTreeOptions.value = buildOrgTree(list);
+    orgOptionsAll.value = list.map((item: IamOrg) => ({
+      label: `${item.name} (${item.org_id.slice(0, 8)})`,
+      value: item.org_id,
+    }));
+    orgTreeOptions.value = buildOrgTree(activeOrgs);
   } catch (error) {
     console.error('[IAM Role] fetchOrgs failed', error);
   }
@@ -284,7 +290,7 @@ async function loadOrgOptions() {
 
 function orgLabel(id?: string | null) {
   if (!id) return '';
-  return orgOptions.value.find((item) => item.value === id)?.label ?? id;
+  return orgOptionsAll.value.find((item) => item.value === id)?.label ?? id;
 }
 
 function permissionLabel(item: any) {

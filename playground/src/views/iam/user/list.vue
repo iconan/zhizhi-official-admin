@@ -30,10 +30,14 @@ const currentUser = ref<IamAdminUser | null>(null);
 const isEditing = ref(false);
 const targetUserForRoles = ref<IamAdminUser | null>(null);
 const targetUserForPwd = ref<IamAdminUser | null>(null);
-const roleOptions = ref<{ label: string; value: string }[]>([]);
-const roleMap = ref<Record<string, string>>({});
-const orgOptions = ref<{ label: string; value: string }[]>([]);
+const roleOptions = ref<{ label: string; value: string }[]>([]); // active roles for forms
+const roleMap = ref<Record<string, string>>({}); // all roles for label mapping
+const orgOptions = ref<{ label: string; value: string }[]>([]); // active orgs for forms
+const orgOptionsAll = ref<{ label: string; value: string }[]>([]); // all orgs for label mapping
 const orgTreeOptions = ref<any[]>([]);
+
+const normalizeRoleCode = (val: any): string =>
+  typeof val === 'string' ? val : (val?.code as string | undefined) ?? '';
 
 const userPasswordSchema = {
   component: 'InputPassword',
@@ -53,8 +57,8 @@ const userBaseSchema = [
   {
     component: 'Input',
     fieldName: 'name',
-    label: '姓名',
-    rules: z.string().min(1, '请输入姓名').max(100, '过长'),
+    label: '用户名称',
+    rules: z.string().min(1, '请输入用户名称').max(100, '过长'),
   },
   {
     component: 'TreeSelect',
@@ -71,7 +75,7 @@ const userBaseSchema = [
       filterTreeNode: (input: string, node: any) =>
         (node?.label as string)?.toLowerCase()?.includes(input.toLowerCase()),
       onChange: (value: string) => {
-        loadRoleOptionsForOrg(value);
+        void loadRoleOptionsForOrg(value);
         // 清空已选角色，避免跨组织脏数据
         roleFormApi.setValues({ role_codes: [] });
         userFormApi.setValues({ role_codes: [] });
@@ -166,7 +170,7 @@ function getColumns(onActionClickFn: OnActionClickFn<IamAdminUser>) {
       field: 'org_id',
       title: '所属组织',
       minWidth: 180,
-      formatter: ({ cellValue }) => orgLabel(cellValue),
+      formatter: ({ cellValue }: { cellValue: string | null }) => orgLabel(cellValue),
     },
     {
       field: 'roles',
@@ -215,7 +219,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
           try {
             const items = await fetchAdminUsers();
             const enriched = await Promise.all(
-              items.map(async (item) => {
+              items.map(async (item: IamAdminUser) => {
                 try {
                   const detail = await fetchAdminUserDetail(item.admin_user_id);
                   return { ...item, ...((detail as any) ?? {}) };
@@ -226,13 +230,14 @@ const [Grid, gridApi] = useVbenVxeGrid({
               }),
             );
             // Build role label map from detail roles if available
-            enriched.forEach((u) => {
+            enriched.forEach((u: any) => {
               const roles = (u as any)?.roles || (u as any)?.role_codes || [];
-              (roles as any[]).forEach((r) => {
-                const code = typeof r === 'string' ? r : r?.code;
-                const name = typeof r === 'string' ? undefined : r?.name;
-                if (code) roleMap.value[code] = name ? `${code}（${name}）` : roleMap.value[code] ?? code;
-              });
+              (roles as any[])
+                .map((r: any) => ({ code: normalizeRoleCode(r), name: typeof r === 'string' ? undefined : r?.name }))
+                .filter((r) => r.code)
+                .forEach(({ code, name }) => {
+                  roleMap.value[code] = name ? `${code}（${name}）` : roleMap.value[code] ?? code;
+                });
             });
             return enriched;
           } catch (error) {
@@ -250,13 +255,14 @@ const [Grid, gridApi] = useVbenVxeGrid({
 
 onMounted(async () => {
   await Promise.all([loadRoleOptionsForOrg(), loadOrgOptions()]);
-  nextTick(() => gridApi.query());
+  nextTick(() => void gridApi.query());
 });
 
 async function loadRoleOptionsForOrg(orgId?: string | null) {
   try {
     const list = await fetchRoles({ limit: 200, offset: 0, org_id: orgId || undefined });
-    roleOptions.value = list.map((item: IamRole) => ({
+    const activeList = list.filter((item: IamRole) => item.status === 'active');
+    roleOptions.value = activeList.map((item: IamRole) => ({
       label: `${item.code}（${item.name}）`,
       value: item.code,
     }));
@@ -270,12 +276,17 @@ async function loadRoleOptionsForOrg(orgId?: string | null) {
 
 async function loadOrgOptions() {
   try {
-    const list = await fetchOrgs({ limit: 200, offset: 0, status: 'active' });
-    orgOptions.value = list.map((item: IamOrg) => ({
+    const list = await fetchOrgs({ limit: 200, offset: 0 });
+    const activeOrgs = list.filter((item) => item.status === 'active');
+    orgOptions.value = activeOrgs.map((item: IamOrg) => ({
       label: `${item.name} (${item.org_id.slice(0, 8)})`,
       value: item.org_id,
     }));
-    orgTreeOptions.value = buildOrgTree(list);
+    orgOptionsAll.value = list.map((item: IamOrg) => ({
+      label: `${item.name} (${item.org_id.slice(0, 8)})`,
+      value: item.org_id,
+    }));
+    orgTreeOptions.value = buildOrgTree(activeOrgs);
   } catch (error) {
     console.error('[IAM AdminUser] fetchOrgs failed', error);
   }
@@ -283,7 +294,7 @@ async function loadOrgOptions() {
 
 function orgLabel(id?: string | null) {
   if (!id) return '';
-  return orgOptions.value.find((item) => item.value === id)?.label ?? id;
+  return orgOptionsAll.value.find((item) => item.value === id)?.label ?? id;
 }
 
 function roleLabel(code?: string) {
@@ -293,7 +304,7 @@ function roleLabel(code?: string) {
 
 function buildOrgTree(list: IamOrg[]) {
   const nodes: Record<string, any> = {};
-  list.forEach((item) => {
+  list.forEach((item: IamOrg) => {
     nodes[item.org_id] = nodes[item.org_id] || {};
     nodes[item.org_id] = {
       value: item.org_id,
@@ -302,7 +313,7 @@ function buildOrgTree(list: IamOrg[]) {
     };
   });
   const roots: any[] = [];
-  list.forEach((item) => {
+  list.forEach((item: IamOrg) => {
     const node = nodes[item.org_id];
     if (item.parent_id && nodes[item.parent_id]) {
       nodes[item.parent_id].children.push(node);
@@ -326,13 +337,13 @@ function openUserDrawer(row?: IamAdminUser) {
     await userFormApi.resetForm();
     if (row) {
       const roles = (row as any)?.roles || (row as any)?.role_codes || [];
-      const normalizedRoles = (roles as any[]).map((item) =>
-        typeof item === 'string' ? item : item?.code,
-      );
+      const normalizedRoles = (roles as any[])
+        .map((item) => normalizeRoleCode(item))
+        .filter(Boolean);
       userFormApi.setValues({ ...row, password: undefined, role_codes: normalizedRoles });
     }
   });
-  loadRoleOptionsForOrg(row?.org_id);
+  void loadRoleOptionsForOrg(row?.org_id);
 }
 
 function onCreate() {
@@ -368,7 +379,7 @@ async function onSubmitUser() {
       message.success('创建成功');
     }
     userDrawerApi.close();
-    gridApi.query();
+    void gridApi.query();
   } finally {
     userDrawerApi.unlock();
   }
@@ -380,13 +391,18 @@ function renderStatus(isActive: ActiveStatus) {
     : { text: '已禁用', color: 'red' };
 }
 
+function normalizedRoleCodes(row: any): string[] {
+  const roles = (row as any)?.roles || (row as any)?.role_codes || [];
+  return (roles as any[]).map((item) => normalizeRoleCode(item)).filter(Boolean);
+}
+
 function toggleStatus(row: IamAdminUser) {
   const nextStatus: ActiveStatus = !row.is_active;
   const hide = message.loading({ content: '正在更新状态', duration: 0 });
   updateAdminUserStatus(row.admin_user_id, nextStatus)
     .then(() => {
       message.success('状态已更新');
-      gridApi.query();
+      void gridApi.query();
     })
     .finally(() => hide());
 }
@@ -395,15 +411,13 @@ function openRoleDrawer(row: IamAdminUser) {
   targetUserForRoles.value = row;
   roleDrawerApi.open();
   nextTick(() => {
-    roleFormApi.resetForm();
+    void roleFormApi.resetForm();
     const roles = (row as any)?.roles || (row as any)?.role_codes || [];
-    const normalized = (roles as any[]).map((item) =>
-      typeof item === 'string' ? item : item?.code,
-    );
+    const normalized = (roles as any[]).map((item) => normalizeRoleCode(item)).filter(Boolean);
     roleFormApi.setValues({ role_codes: normalized });
   });
   // refresh role options scoped to user's org
-  loadRoleOptionsForOrg(row.org_id);
+  void loadRoleOptionsForOrg(row.org_id);
 }
 
 async function onSubmitBindRoles() {
@@ -415,7 +429,7 @@ async function onSubmitBindRoles() {
     await bindRolesToAdminUser(targetUserForRoles.value.admin_user_id, values.role_codes);
     message.success('绑定成功');
     roleDrawerApi.close();
-    gridApi.query();
+    void gridApi.query();
   } finally {
     roleDrawerApi.unlock();
   }
@@ -424,7 +438,7 @@ async function onSubmitBindRoles() {
 function openPasswordDrawer(row: IamAdminUser) {
   targetUserForPwd.value = row;
   passwordDrawerApi.open();
-  nextTick(() => passwordFormApi.resetForm());
+  nextTick(() => void passwordFormApi.resetForm());
 }
 
 async function onSubmitResetPassword() {
@@ -441,6 +455,18 @@ async function onSubmitResetPassword() {
     passwordDrawerApi.unlock();
   }
 }
+
+function handleClickSubmitUser() {
+  void onSubmitUser();
+}
+
+function handleClickBindRoles() {
+  void onSubmitBindRoles();
+}
+
+function handleClickResetPassword() {
+  void onSubmitResetPassword();
+}
 </script>
 
 <template>
@@ -450,7 +476,7 @@ async function onSubmitResetPassword() {
       <template #footer>
         <div class="flex justify-end gap-2 pr-4 pb-2">
           <Button @click="userDrawerApi.close()">取消</Button>
-          <Button type="primary" @click="onSubmitUser">保存</Button>
+          <Button type="primary" @click="handleClickSubmitUser">保存</Button>
         </div>
       </template>
     </UserDrawer>
@@ -460,7 +486,7 @@ async function onSubmitResetPassword() {
       <template #footer>
         <div class="flex justify-end gap-2 pr-4 pb-2">
           <Button @click="roleDrawerApi.close()">取消</Button>
-          <Button type="primary" @click="onSubmitBindRoles">保存</Button>
+          <Button type="primary" @click="handleClickBindRoles">保存</Button>
         </div>
       </template>
     </RoleDrawer>
@@ -470,7 +496,7 @@ async function onSubmitResetPassword() {
       <template #footer>
         <div class="flex justify-end gap-2 pr-4 pb-2">
           <Button @click="passwordDrawerApi.close()">取消</Button>
-          <Button type="primary" @click="onSubmitResetPassword">保存</Button>
+          <Button type="primary" @click="handleClickResetPassword">保存</Button>
         </div>
       </template>
     </PasswordDrawer>
@@ -489,11 +515,11 @@ async function onSubmitResetPassword() {
         <div class="flex flex-wrap gap-1">
           <Tag v-if="!(row.roles?.length) && !(row.role_codes?.length)" color="default">-</Tag>
           <Tag
-            v-for="code in (row.roles || row.role_codes || [])"
-            :key="typeof code === 'string' ? code : code?.code"
+            v-for="code in normalizedRoleCodes(row)"
+            :key="code"
             color="blue"
           >
-            {{ roleLabel(typeof code === 'string' ? code : code?.code) }}
+            {{ roleLabel(code) }}
           </Tag>
         </div>
       </template>
