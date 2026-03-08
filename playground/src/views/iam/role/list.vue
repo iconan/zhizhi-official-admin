@@ -68,7 +68,7 @@ const [RoleForm, roleFormApi] = useVbenForm({
         filterTreeNode: (input: string, node: any) =>
           (node?.label as string)?.toLowerCase()?.includes(input.toLowerCase()),
       },
-      rules: z.string().max(200, '过长').optional(),
+      rules: z.string({ required_error: '请选择所属组织' }).min(1, '请选择所属组织').max(200, '过长'),
     },
   ],
 });
