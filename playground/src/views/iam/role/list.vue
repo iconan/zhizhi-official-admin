@@ -376,7 +376,11 @@ function openBind(row: IamRole) {
   bindDrawerApi.open();
   nextTick(() => {
     bindFormApi.resetForm();
-    bindFormApi.setValues({ permission_codes: [] });
+    const codes = (row as any)?.permission_codes || (row as any)?.permissions || [];
+    const normalized = (codes as any[]).map((item) =>
+      typeof item === 'string' ? item : item.code,
+    );
+    bindFormApi.setValues({ permission_codes: normalized });
   });
 }
 
@@ -389,6 +393,7 @@ async function onSubmitBind() {
     await bindRolePermissions(bindTarget.value.role_id, values.permission_codes);
     message.success('绑定成功');
     bindDrawerApi.close();
+    gridApi.query();
   } finally {
     bindDrawerApi.unlock();
   }

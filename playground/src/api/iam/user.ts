@@ -37,6 +37,10 @@ export async function fetchAdminUsers(params: AdminUserQuery = {}) {
   return (res as any)?.items ?? (res as any)?.data?.items ?? (res as any)?.data ?? [];
 }
 
+export async function fetchAdminUserDetail(adminUserId: string) {
+  return requestClient.get(`${IAM_PREFIX}/admin-users/${adminUserId}`);
+}
+
 export async function createAdminUser(
   data: Required<Pick<SaveAdminUserInput, 'email' | 'name' | 'password'>> & SaveAdminUserInput,
 ) {
