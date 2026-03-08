@@ -60,7 +60,7 @@ const schema: VbenFormSchema[] = [
   {
     component: 'Input',
     fieldName: 'path',
-    label: '路径',
+    label: '路由地址',
     dependencies: {
       show: (values) => values.menu_type !== 'button',
       triggerFields: ['menu_type'],
@@ -80,7 +80,7 @@ const schema: VbenFormSchema[] = [
   {
     component: 'AutoComplete',
     fieldName: 'component',
-    label: '组件',
+    label: '页面组件',
     dependencies: {
       show: (values) => values.menu_type === 'menu' || values.menu_type === 'directory',
       triggerFields: ['menu_type'],

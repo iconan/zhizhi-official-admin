@@ -128,7 +128,7 @@ function onDelete(row: IamMenu) {
 <template>
   <Page auto-content-height>
     <FormDrawer @success="onRefresh" />
-    <Grid>
+    <Grid table-title="菜单列表">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">
           <Plus class="size-5" /> 新增菜单

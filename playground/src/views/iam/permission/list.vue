@@ -171,7 +171,7 @@ function onCreate() {
       </template>
     </PermissionDrawer>
 
-    <Grid>
+    <Grid table-title="权限列表">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增权限点</Button>
       </template>

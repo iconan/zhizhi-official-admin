@@ -2,7 +2,7 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Button, message, Tag } from 'ant-design-vue';
+import { Button, Select, Tag, message } from 'ant-design-vue';
 import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenForm, z } from '#/adapter/form';
@@ -10,6 +10,7 @@ import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
   bindRolePermissions,
   createRole,
+  fetchRoleDetail,
   fetchRoles,
   type IamRole,
   updateRole,
@@ -111,14 +112,21 @@ const onActionClick: OnActionClickFn<IamRole> = ({ code, row }) => {
 
 function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
   return [
-    { field: 'name', title: '名称', minWidth: 160 },
+    { field: 'name', title: '角色名称', minWidth: 160 },
     { field: 'code', title: '编码', minWidth: 160 },
     { field: 'description', title: '描述', minWidth: 220 },
     {
       field: 'org_id',
-      title: '组织',
+      title: '所属组织',
       minWidth: 200,
       formatter: ({ cellValue }) => orgLabel(cellValue),
+    },
+    {
+      field: 'permission_codes',
+      title: '绑定权限',
+      minWidth: 260,
+      showOverflow: false,
+      slots: { default: 'permissions' },
     },
     {
       field: 'status',
@@ -146,6 +154,51 @@ function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
 }
 
 const [Grid, gridApi] = useVbenVxeGrid({
+  formOptions: {
+    schema: [
+      {
+        component: 'Input',
+        fieldName: 'keyword',
+        label: '名称或编码',
+        componentProps: {
+          allowClear: true,
+          placeholder: '名称或编码',
+        },
+      },
+      {
+        component: 'TreeSelect',
+        fieldName: 'org_id',
+        label: '所属组织',
+        componentProps: {
+          allowClear: true,
+          showSearch: true,
+          treeDefaultExpandAll: true,
+          treeData: orgTreeOptions,
+          placeholder: '选择组织',
+          style: { width: '100%' },
+          dropdownMatchSelectWidth: false,
+          filterTreeNode: (input: string, node: any) =>
+            (node?.label as string)?.toLowerCase()?.includes(input.toLowerCase()),
+        },
+      },
+      {
+        component: 'Select',
+        fieldName: 'status',
+        label: '状态',
+        defaultValue: undefined,
+        componentProps: {
+          allowClear: true,
+          placeholder: '全部状态',
+          options: [
+            { label: '已启用', value: 'active' },
+            { label: '已禁用', value: 'disabled' },
+          ],
+          style: { width: '100%' },
+        },
+      },
+    ],
+    submitOnChange: true,
+  },
   gridOptions: {
     columns: getColumns(onActionClick),
     height: 'auto',
@@ -155,10 +208,30 @@ const [Grid, gridApi] = useVbenVxeGrid({
       enabled: true,
       autoLoad: false,
       ajax: {
-        query: async () => {
+        query: async (_params, formValues) => {
           try {
-            const items = await fetchRoles();
-            return items;
+            const items = await fetchRoles({
+              keyword: formValues?.keyword || undefined,
+              org_id: formValues?.org_id || undefined,
+              status: formValues?.status || undefined,
+            });
+            // fetch permissions for each role in parallel
+            const withPermissions = await Promise.all(
+              items.map(async (role) => {
+                try {
+                  const detail = await fetchRoleDetail(role.role_id);
+                  return {
+                    ...role,
+                    permission_codes:
+                      (detail as any)?.permission_codes || (detail as any)?.permissions,
+                  };
+                } catch (e) {
+                  console.error('[IAM Role] fetchRoleDetail failed', role.role_id, e);
+                  return role;
+                }
+              }),
+            );
+            return withPermissions;
           } catch (error) {
             console.error('[IAM Role] fetchRoles failed', error);
             return [];
@@ -212,6 +285,16 @@ async function loadOrgOptions() {
 function orgLabel(id?: string | null) {
   if (!id) return '';
   return orgOptions.value.find((item) => item.value === id)?.label ?? id;
+}
+
+function permissionLabel(item: any) {
+  if (!item) return '';
+  // backend may return string codes or objects like { code, name }
+  const code = typeof item === 'string' ? item : item.code;
+  const name = typeof item === 'string' ? undefined : item.name;
+  const optionLabel = permissionOptions.value.find((opt) => opt.value === code)?.label;
+  if (name && code) return `${code}（${name}）`;
+  return optionLabel ?? code ?? '';
 }
 
 function buildOrgTree(list: IamOrg[]) {
@@ -334,7 +417,7 @@ async function onSubmitBind() {
       </template>
     </BindDrawer>
 
-    <Grid>
+    <Grid table-title="角色列表">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增角色</Button>
       </template>
@@ -343,6 +426,23 @@ async function onSubmitBind() {
         <Tag :color="renderStatus(row.status).color">
           {{ renderStatus(row.status).text }}
         </Tag>
+      </template>
+      <template #permissions="{ row }">
+        <div class="flex flex-wrap gap-1">
+          <Tag
+            v-if="!(row.permission_codes?.length) && !(row.permissions?.length)"
+            color="default"
+          >
+            -
+          </Tag>
+          <Tag
+            v-for="p in row.permission_codes || row.permissions || []"
+            :key="typeof p === 'string' ? p : p.code"
+            color="blue"
+          >
+            {{ permissionLabel(p) }}
+          </Tag>
+        </div>
       </template>
     </Grid>
   </Page>

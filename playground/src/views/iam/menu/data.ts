@@ -47,7 +47,7 @@ export function useColumns(
     },
     {
       field: 'path',
-      title: '路径',
+      title: '路由地址',
       minWidth: 200,
     },
     {
@@ -58,7 +58,7 @@ export function useColumns(
     },
     {
       field: 'component',
-      title: '组件',
+      title: '页面组件',
       minWidth: 160,
     },
     {

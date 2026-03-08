@@ -35,6 +35,10 @@ export async function fetchRoles(params: RoleQuery = {}) {
   return (res as any)?.items ?? (res as any)?.data?.items ?? (res as any)?.data ?? [];
 }
 
+export async function fetchRoleDetail(roleId: string) {
+  return requestClient.get(`${IAM_PREFIX}/roles/${roleId}`);
+}
+
 export async function createRole(data: Required<Pick<SaveRoleInput, 'code' | 'name'>> & SaveRoleInput) {
   return requestClient.post(`${IAM_PREFIX}/roles`, data);
 }

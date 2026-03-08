@@ -325,7 +325,7 @@ async function onSubmitResetPassword() {
       </template>
     </PasswordDrawer>
 
-    <Grid>
+    <Grid table-title="用户列表">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增管理员</Button>
       </template>

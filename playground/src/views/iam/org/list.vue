@@ -309,7 +309,7 @@ function toggleStatus(row: IamOrg) {
       </template>
     </OrgDrawer>
 
-    <Grid>
+    <Grid table-title="组织列表">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增组织</Button>
       </template>
