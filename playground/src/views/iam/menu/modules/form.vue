@@ -107,6 +107,8 @@ const schema: VbenFormSchema[] = [
       optionFilterProp: 'label',
       options: permissionOptions,
       placeholder: '从已有权限点选择',
+      style: { width: '100%' },
+      dropdownMatchSelectWidth: false,
     },
   },
   {
