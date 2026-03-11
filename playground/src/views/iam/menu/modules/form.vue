@@ -195,12 +195,14 @@ async function onSubmit() {
 
   // external_url only for link, remove otherwise
   if (payload.menu_type !== 'link') {
-    delete payload.external_url;
+    payload.external_url = null;
   }
-  // 目录/按钮不需要组件
-  if (payload.menu_type === 'directory' || payload.menu_type === 'button') {
-    delete payload.component;
-  }
+  // 始终传递表单字段，空值归一为 null
+  payload.component = payload.component ?? null;
+  payload.icon = payload.icon ?? null;
+  payload.permission_code = payload.permission_code ?? null;
+  payload.parent_id = payload.parent_id ?? null;
+  payload.sort = payload.sort ?? null;
 
   try {
     if (formData.value?.menu_id) {

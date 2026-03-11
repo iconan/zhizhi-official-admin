@@ -120,6 +120,8 @@ const [RegionForm, regionFormApi] = useVbenForm({
   ],
 });
 
+const initialLoading = ref(true);
+
 const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions: {
     columns: getColumns(onActionClick),
@@ -193,13 +195,20 @@ const [Grid, gridApi] = useVbenVxeGrid({
       },
     ],
     submitOnChange: true,
-    showCollapse: false,
   },
 });
 
 onMounted(async () => {
-  await loadRegionOptions();
-  nextTick(() => void gridApi.query());
+  initialLoading.value = true;
+  gridApi.setLoading?.(true);
+  try {
+    await loadRegionOptions();
+    await nextTick();
+    await gridApi.query();
+  } finally {
+    initialLoading.value = false;
+    gridApi.setLoading?.(false);
+  }
 });
 
 async function loadRegionOptions() {
@@ -238,7 +247,8 @@ async function loadRegionOptions() {
   }
 }
 
-function onActionClick({ code, row }: OnActionClickFn<Region>) {
+function onActionClick(params: Parameters<OnActionClickFn<Region>>[0]) {
+  const { code, row } = params;
   switch (code as ActionCode) {
     case 'edit':
       openDrawer(row);
@@ -263,13 +273,13 @@ function getColumns(onActionClickFn: OnActionClickFn<Region>) {
       field: 'level',
       title: '级别',
       width: 110,
-      formatter: ({ cellValue }) => levelLabelMap[cellValue] || cellValue,
+      formatter: ({ cellValue }: { cellValue: number }) => levelLabelMap[cellValue] || cellValue,
     },
     {
       field: 'parent_code',
       title: '上级区域',
       width: 200,
-      formatter: ({ cellValue }) => (cellValue ? regionMap.value[cellValue] || cellValue : ''),
+      formatter: ({ cellValue }: { cellValue: string }) => (cellValue ? regionMap.value[cellValue] || cellValue : ''),
     },
     {
       field: 'is_active',
@@ -307,9 +317,9 @@ function openDrawer(row?: Region) {
     await regionFormApi.resetForm();
     if (row) {
       const nextStatus: RegionActiveStatus = row.is_active === -1 ? -1 : 1;
-      regionFormApi.setValues({ ...row, is_active: nextStatus });
+      await regionFormApi.setValues({ ...row, is_active: nextStatus });
     } else {
-      regionFormApi.setValues({
+      await regionFormApi.setValues({
         code: undefined,
         name: undefined,
         level: null,
@@ -340,7 +350,7 @@ async function onSubmitRegion() {
       message.success('创建成功');
     }
     formDrawerApi.close();
-    gridApi.query();
+    await gridApi.query();
     await loadRegionOptions();
   } finally {
     formDrawerApi.unlock();
@@ -359,7 +369,7 @@ function confirmDelete(row: Region) {
       try {
         await deleteRegion(row.id || row.code);
         message.success('删除成功');
-        gridApi.query();
+        await gridApi.query();
         await loadRegionOptions();
       } finally {
         hide();
@@ -368,15 +378,16 @@ function confirmDelete(row: Region) {
   });
 }
 
-function toggleStatus(row: Region) {
+async function toggleStatus(row: Region) {
   const nextStatus: RegionStatus = row.is_active === 1 ? -1 : 1;
   const hide = message.loading({ content: '正在更新状态', duration: 0 });
-  updateRegion(row.id || row.code, { is_active: nextStatus })
-    .then(() => {
-      message.success('状态已更新');
-      gridApi.query();
-    })
-    .finally(() => hide());
+  try {
+    await updateRegion(row.id || row.code, { is_active: nextStatus });
+    message.success('状态已更新');
+    await gridApi.query();
+  } finally {
+    hide();
+  }
 }
 
 function renderStatus(status: RegionStatus) {
