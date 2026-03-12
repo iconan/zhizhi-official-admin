@@ -57,6 +57,7 @@ const [RoleForm, roleFormApi] = useVbenForm({
       component: 'TreeSelect',
       fieldName: 'org_id',
       label: '所属组织',
+      defaultValue: null,
       componentProps: {
         allowClear: true,
         showSearch: true,
@@ -260,8 +261,8 @@ onMounted(async () => {
 
 async function loadPermissionOptions() {
   try {
-    const list = await fetchPermissions({ limit: 500, offset: 0 });
-    permissionOptions.value = list.map((item: IamPermission) => ({
+    const { items } = await fetchPermissions({ limit: 500, offset: 0 });
+    permissionOptions.value = items.map((item: IamPermission) => ({
       label: `${item.code}（${item.name}）`,
       value: item.code,
     }));

@@ -92,23 +92,29 @@ const [Grid, gridApi] = useVbenVxeGrid({
     columns: getColumns(onActionClick),
     height: 'auto',
     keepSource: true,
-    pagerConfig: { enabled: false },
+    pagerConfig: { enabled: true, pageSize: 20, pageSizes: [10, 20, 50, 100] },
     proxyConfig: {
       enabled: true,
       autoLoad: false,
       ajax: {
-        query: async () => {
+        query: async ({ page }: any, formValues: any) => {
           try {
-            const items = await fetchPermissions();
-            return items;
+            const limit = page?.pageSize || 20;
+            const offset = ((page?.currentPage || 1) - 1) * limit;
+            const { items, total } = await fetchPermissions({
+              limit,
+              offset,
+              code: formValues?.code || undefined,
+              resource: formValues?.resource || undefined,
+              action: formValues?.action || undefined,
+              name: formValues?.name || undefined,
+            } as any);
+            return { items, total } as any;
           } catch (error) {
             console.error('[IAM Permission] fetchPermissions failed', error);
-            return [];
+            return { items: [], total: 0 } as any;
           }
         },
-      },
-      response: {
-        result: ({ response }: any) => response,
       },
     } as any,
     rowConfig: { keyField: 'permission_id' },
@@ -119,6 +125,35 @@ const [Grid, gridApi] = useVbenVxeGrid({
       zoom: true,
     },
   } as VxeTableGridOptions,
+  formOptions: {
+    submitOnChange: true,
+    schema: [
+      {
+        component: 'Input',
+        fieldName: 'code',
+        label: '权限码',
+        componentProps: { allowClear: true },
+      },
+      {
+        component: 'Input',
+        fieldName: 'resource',
+        label: '资源',
+        componentProps: { allowClear: true },
+      },
+      {
+        component: 'Input',
+        fieldName: 'action',
+        label: '动作',
+        componentProps: { allowClear: true },
+      },
+      {
+        component: 'Input',
+        fieldName: 'name',
+        label: '名称',
+        componentProps: { allowClear: true },
+      },
+    ],
+  },
 });
 
 onMounted(() => {
