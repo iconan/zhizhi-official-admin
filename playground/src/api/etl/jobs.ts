@@ -1,6 +1,8 @@
 import { requestClient } from '#/api/request';
 
-const ETK_PREFIX = '/v1/admin/etl';
+const ETL_PREFIX = '/v1/admin/etl';
+
+export type JobCreateEndpoint = 'collect/web' | 'import';
 
 export interface JobQuery {
   limit?: number;
@@ -20,7 +22,7 @@ export interface JobInput {
 }
 
 export async function fetchJobs(params: JobQuery = {}) {
-  const res = await requestClient.get(`${ETK_PREFIX}/jobs`, { params });
+  const res = await requestClient.get(`${ETL_PREFIX}/jobs`, { params });
   const data = (res as any)?.data ?? res;
   const payload = data?.data ?? data ?? {};
   const items = (payload as any)?.items ?? [];
@@ -29,13 +31,13 @@ export async function fetchJobs(params: JobQuery = {}) {
 }
 
 export async function fetchMetricsSummary() {
-  return requestClient.get(`${ETK_PREFIX}/metrics/summary`);
+  return requestClient.get(`${ETL_PREFIX}/metrics/summary`);
 }
 
 export async function replayDeadLetter() {
-  return requestClient.post(`${ETK_PREFIX}/jobs/replay-dead-letter`);
+  return requestClient.post(`${ETL_PREFIX}/jobs/replay-dead-letter`);
 }
 
-export async function createJob(payload: JobInput) {
-  return requestClient.post(`${ETK_PREFIX}/jobs`, payload);
+export async function createJob(payload: JobInput, endpoint: JobCreateEndpoint = 'collect/web') {
+  return requestClient.post(`${ETL_PREFIX}/${endpoint}`, payload);
 }

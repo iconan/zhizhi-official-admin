@@ -15,6 +15,7 @@ import {
   type RegionActiveStatus,
   type Region,
 } from '#/api/om/region';
+import { getRegionLabelMap, getRegionListCached, getRegionTreeOptions } from '#/store/tree-data';
 
 interface RegionOption {
   label: string;
@@ -213,35 +214,11 @@ onMounted(async () => {
 
 async function loadRegionOptions() {
   try {
-    const { items } = await fetchRegions({ limit: 10000, offset: 0 });
-    const uniqItems = Array.from(new Map(items.map((i) => [i.code, i])).values());
+    const list = await getRegionListCached();
+    const uniqItems = Array.from(new Map(list.map((i) => [i.code, i])).values());
     regionOptions.value = uniqItems.map((item) => ({ label: `${item.name} (${item.code})`, value: item.code }));
-    regionMap.value = uniqItems.reduce((acc, cur) => {
-      acc[cur.code] = `${cur.name}`;
-      return acc;
-    }, {} as Record<string, string>);
-
-    // 构造父子树，供 TreeSelect 使用
-    const nodeMap: Record<string, any> = {};
-    uniqItems.forEach((item) => {
-      nodeMap[item.code] = {
-        title: `${item.name} (${item.code})`,
-        label: `${item.name} (${item.code})`,
-        value: item.code,
-        key: item.code,
-        children: [],
-      };
-    });
-    const roots: any[] = [];
-    uniqItems.forEach((item) => {
-      const node = nodeMap[item.code];
-      if (item.parent_code && nodeMap[item.parent_code]) {
-        nodeMap[item.parent_code].children.push(node);
-      } else {
-        roots.push(node);
-      }
-    });
-    regionTreeOptions.value = roots;
+    regionMap.value = await getRegionLabelMap();
+    regionTreeOptions.value = await getRegionTreeOptions();
   } catch (error) {
     console.error('[OM Regions] loadRegionOptions failed', error);
   }

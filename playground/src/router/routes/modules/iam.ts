@@ -60,6 +60,16 @@ const routes: RouteRecordRaw[] = [
         },
         component: () => import('#/views/iam/permission/list.vue'),
       },
+      {
+        path: '/iam/tenant',
+        name: 'IamTenant',
+        meta: {
+          title: '租户管理',
+          icon: 'mdi:home-city-outline',
+          ignoreAccess: true,
+        },
+        component: () => import('#/views/iam/tenant/list.vue'),
+      },
     ],
   },
 ];

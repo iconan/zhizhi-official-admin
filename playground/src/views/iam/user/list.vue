@@ -17,8 +17,8 @@ import {
   updateAdminUser,
   updateAdminUserStatus,
 } from '#/api/iam/user';
-import { fetchOrgs, type IamOrg } from '#/api/iam/org';
 import { fetchRoles, type IamRole } from '#/api/iam/role';
+import { getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
 
 type ActiveStatus = boolean;
 
@@ -64,6 +64,7 @@ const userBaseSchema = [
     component: 'TreeSelect',
     fieldName: 'org_id',
     label: '所属组织',
+    defaultValue: null,
     componentProps: {
       allowClear: true,
       showSearch: true,
@@ -276,17 +277,9 @@ async function loadRoleOptionsForOrg(orgId?: string | null) {
 
 async function loadOrgOptions() {
   try {
-    const list = await fetchOrgs({ limit: 200, offset: 0 });
-    const activeOrgs = list.filter((item) => item.status === 'active');
-    orgOptions.value = activeOrgs.map((item: IamOrg) => ({
-      label: `${item.name} (${item.org_id.slice(0, 8)})`,
-      value: item.org_id,
-    }));
-    orgOptionsAll.value = list.map((item: IamOrg) => ({
-      label: `${item.name} (${item.org_id.slice(0, 8)})`,
-      value: item.org_id,
-    }));
-    orgTreeOptions.value = buildOrgTree(activeOrgs);
+    orgOptions.value = await getActiveOrgOptions();
+    orgOptionsAll.value = await getAllOrgOptions();
+    orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
     console.error('[IAM AdminUser] fetchOrgs failed', error);
   }
@@ -300,28 +293,6 @@ function orgLabel(id?: string | null) {
 function roleLabel(code?: string) {
   if (!code) return '';
   return roleMap.value[code] ?? roleOptions.value.find((item) => item.value === code)?.label ?? code;
-}
-
-function buildOrgTree(list: IamOrg[]) {
-  const nodes: Record<string, any> = {};
-  list.forEach((item: IamOrg) => {
-    nodes[item.org_id] = nodes[item.org_id] || {};
-    nodes[item.org_id] = {
-      value: item.org_id,
-      label: `${item.name}`,
-      children: nodes[item.org_id].children || [],
-    };
-  });
-  const roots: any[] = [];
-  list.forEach((item: IamOrg) => {
-    const node = nodes[item.org_id];
-    if (item.parent_id && nodes[item.parent_id]) {
-      nodes[item.parent_id].children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  return roots;
 }
 
 function openUserDrawer(row?: IamAdminUser) {

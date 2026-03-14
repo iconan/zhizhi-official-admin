@@ -20,7 +20,7 @@ async function submitCsv() {
   };
   const hide = message.loading({ content: '创建中...', duration: 0 });
   try {
-    await createJob(payload);
+    await createJob(payload, 'import');
     message.success('创建成功');
   } finally {
     hide();

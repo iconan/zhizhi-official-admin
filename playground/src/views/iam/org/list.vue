@@ -9,6 +9,7 @@ import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { createOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
 import { fetchAdminUsers, type IamAdminUser } from '#/api/iam/user';
+import { getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
 
 type OrgStatus = IamOrg['status'];
 
@@ -232,16 +233,9 @@ async function loadSelectOptions() {
       label: `${item.name || item.email} (${item.admin_user_id.slice(0, 8)})`,
       value: item.admin_user_id,
     }));
-    const activeOrgs = orgs.filter((item: IamOrg) => item.status === 'active');
-    orgOptions.value = activeOrgs.map((item: IamOrg) => ({
-      label: `${item.name} (${item.org_id.slice(0, 8)})`,
-      value: item.org_id,
-    }));
-    orgOptionsAll.value = orgs.map((item: IamOrg) => ({
-      label: `${item.name} (${item.org_id.slice(0, 8)})`,
-      value: item.org_id,
-    }));
-    orgTreeOptions.value = buildOrgTree(activeOrgs);
+    orgOptions.value = await getActiveOrgOptions();
+    orgOptionsAll.value = await getAllOrgOptions();
+    orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
     console.error('[IAM Org] load select options failed', error);
   }
@@ -255,28 +249,6 @@ function ownerLabel(id?: string | null) {
 function orgLabel(id?: string | null) {
   if (!id) return '';
   return orgOptionsAll.value.find((item) => item.value === id)?.label ?? id;
-}
-
-function buildOrgTree(list: IamOrg[]) {
-  const nodes: Record<string, any> = {};
-  list.forEach((item) => {
-    nodes[item.org_id] = nodes[item.org_id] || {};
-    nodes[item.org_id] = {
-      value: item.org_id,
-      label: `${item.name}`,
-      children: nodes[item.org_id].children || [],
-    };
-  });
-  const roots: any[] = [];
-  list.forEach((item) => {
-    const node = nodes[item.org_id];
-    if (item.parent_id && nodes[item.parent_id]) {
-      nodes[item.parent_id].children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  return roots;
 }
 
 function renderStatus(status: OrgStatus) {

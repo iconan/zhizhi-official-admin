@@ -17,7 +17,7 @@ import {
   updateRoleStatus,
 } from '#/api/iam/role';
 import { fetchPermissions, type IamPermission } from '#/api/iam/permission';
-import { fetchOrgs, type IamOrg } from '#/api/iam/org';
+import { getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
 
 type RoleStatus = IamRole['status'];
 
@@ -273,17 +273,9 @@ async function loadPermissionOptions() {
 
 async function loadOrgOptions() {
   try {
-    const list = await fetchOrgs({ limit: 200, offset: 0 });
-    const activeOrgs = list.filter((item) => item.status === 'active');
-    orgOptions.value = activeOrgs.map((item: IamOrg) => ({
-      label: `${item.name} (${item.org_id.slice(0, 8)})`,
-      value: item.org_id,
-    }));
-    orgOptionsAll.value = list.map((item: IamOrg) => ({
-      label: `${item.name} (${item.org_id.slice(0, 8)})`,
-      value: item.org_id,
-    }));
-    orgTreeOptions.value = buildOrgTree(activeOrgs);
+    orgOptions.value = await getActiveOrgOptions();
+    orgOptionsAll.value = await getAllOrgOptions();
+    orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
     console.error('[IAM Role] fetchOrgs failed', error);
   }
@@ -302,28 +294,6 @@ function permissionLabel(item: any) {
   const optionLabel = permissionOptions.value.find((opt) => opt.value === code)?.label;
   if (name && code) return `${code}（${name}）`;
   return optionLabel ?? code ?? '';
-}
-
-function buildOrgTree(list: IamOrg[]) {
-  const nodes: Record<string, any> = {};
-  list.forEach((item) => {
-    nodes[item.org_id] = nodes[item.org_id] || {};
-    nodes[item.org_id] = {
-      value: item.org_id,
-      label: `${item.name}`,
-      children: nodes[item.org_id].children || [],
-    };
-  });
-  const roots: any[] = [];
-  list.forEach((item) => {
-    const node = nodes[item.org_id];
-    if (item.parent_id && nodes[item.parent_id]) {
-      nodes[item.parent_id].children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  return roots;
 }
 
 function onCreate() {
