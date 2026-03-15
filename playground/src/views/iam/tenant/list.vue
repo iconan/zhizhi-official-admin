@@ -15,6 +15,7 @@ import {
   fetchTenants,
   reprovisionTenant,
   updateTenant,
+  updateTenantStatus,
 } from '#/api/iam/tenant';
 import { getRegionTreeOptions } from '#/store/tree-data';
 
@@ -39,18 +40,18 @@ const [CreateForm, createFormApi] = useVbenForm({
         treeData: regionTreeOptions,
         treeNodeFilterProp: 'label',
         fieldNames: { label: 'label', value: 'value', children: 'children' },
-        placeholder: '请选择租户编码',
+        placeholder: '请选择区域编码',
         style: { width: '100%' },
       },
       rules: z
-        .string({ required_error: '请选择租户编码' })
-        .min(1, '请选择租户编码')
+        .string({ required_error: '请选择区域编码' })
+        .min(1, '请选择区域编码')
         .max(100, '过长'),
     },
     {
       component: 'InputNumber',
       fieldName: 'es_pool',
-      label: 'ES 索引池',
+      label: 'ES 索引',
       componentProps: { min: 0, max: 999_999, style: { width: '100%' } },
       rules: z.number().nullable().optional(),
     },
@@ -75,21 +76,14 @@ const [EditForm, editFormApi] = useVbenForm({
     },
     {
       component: 'Input',
-      fieldName: 'schema_name',
-      label: 'Schema 名称',
-      componentProps: { disabled: true },
-    },
-    {
-      component: 'Input',
       fieldName: 'name',
       label: '租户名称',
-      componentProps: { allowClear: true },
-      rules: z.string().min(1, '请输入租户名称').max(100, '过长'),
+      componentProps: { disabled: true },
     },
     {
       component: 'InputNumber',
       fieldName: 'es_pool',
-      label: 'ES 索引池',
+      label: 'ES 索引',
       componentProps: { min: 0, max: 999_999, style: { width: '100%' } },
       rules: z.number().nullable().optional(),
     },
@@ -105,8 +99,16 @@ const [EditForm, editFormApi] = useVbenForm({
 
 const onActionClick: OnActionClickFn<IamTenant> = ({ code, row }) => {
   switch (code) {
+    case 'disable': {
+      doUpdateStatus(row, 'disabled');
+      break;
+    }
     case 'edit': {
       openEditDrawer(row);
+      break;
+    }
+    case 'enable': {
+      doUpdateStatus(row, 'active');
       break;
     }
     case 'reprovision': {
@@ -129,14 +131,16 @@ function getColumns(onActionClickFn: OnActionClickFn<IamTenant>) {
       field: 'es_pool',
       title: 'ES 索引',
       minWidth: 120,
-      formatter: ({ cellValue }) => (cellValue ?? cellValue === 0 ? cellValue : '-'),
+      formatter: ({ cellValue }: { cellValue: null | number | undefined }) =>
+        cellValue === 0 ? 0 : (cellValue ?? '-'),
     },
     {
       field: 'mark',
       title: '备注',
       minWidth: 180,
       showOverflow: true,
-      formatter: ({ cellValue }) => cellValue || '-',
+      formatter: ({ cellValue }: { cellValue: null | string | undefined }) =>
+        cellValue || '-',
     },
     {
       field: 'status',
@@ -162,7 +166,34 @@ function getColumns(onActionClickFn: OnActionClickFn<IamTenant>) {
       showOverflow: false,
       cellRender: {
         name: 'CellOperation',
-        options: [{ code: 'reprovision', text: '重新开通' }, 'edit'],
+        options: [
+          {
+            code: 'disable',
+            text: '禁用',
+            type: 'link',
+            danger: true,
+            popconfirm: true,
+            confirmTitle: '确认禁用？',
+            confirmMessage: (row: IamTenant) => `确认禁用租户「${row.name}」？`,
+            show: (row: IamTenant) => row.status === 'active',
+          },
+          {
+            code: 'reprovision',
+            text: '重新开通',
+            show: (row: IamTenant) =>
+              ['provisioning', 'provisioning_failed'].includes(row.status),
+          },
+          {
+            code: 'enable',
+            text: '启用',
+            type: 'link',
+            popconfirm: true,
+            confirmTitle: '确认启用？',
+            confirmMessage: (row: IamTenant) => `确认启用租户「${row.name}」？`,
+            show: (row: IamTenant) => row.status === 'disabled',
+          },
+          'edit',
+        ],
         attrs: { onClick: onActionClickFn },
       },
     },
@@ -251,7 +282,7 @@ async function loadRegionOptions() {
   }
 }
 
-function findTreeNodeLabel(value: string, nodes: any[]): string | null {
+function findTreeNodeLabel(value: string, nodes: any[]): null | string {
   for (const node of nodes ?? []) {
     if (node?.value === value) return node?.label ?? null;
     const child = findTreeNodeLabel(value, node?.children ?? []);
@@ -260,12 +291,12 @@ function findTreeNodeLabel(value: string, nodes: any[]): string | null {
   return null;
 }
 
-function extractNameFromLabel(label?: string | null) {
+function extractNameFromLabel(label?: null | string) {
   if (!label) return '';
   const idxCn = label.indexOf('（');
   const idxEn = label.indexOf('(');
-  const idx = [idxCn, idxEn].filter((v) => v >= 0).sort((a, b) => a - b)[0];
-  const base = idx !== undefined ? label.slice(0, idx) : label;
+  const idx = [idxCn, idxEn].filter((v) => v >= 0).toSorted((a, b) => a - b)[0];
+  const base = idx === undefined ? label : label.slice(0, idx);
   return base.trim();
 }
 
@@ -303,20 +334,23 @@ function openEditDrawer(row: IamTenant) {
 
 async function onSubmitCreate() {
   const { valid } = await createFormApi.validate();
-  if (!valid) return;
+  if (valid === false) return;
   createDrawerApi.lock();
   try {
     const values = await createFormApi.getValues<{
-      tenant_code: string;
       es_pool?: null | number;
       mark?: null | string;
+      tenant_code: string;
     }>();
-    const tenantLabel = findTreeNodeLabel(values.tenant_code, regionTreeOptions.value);
+    const tenantLabel = findTreeNodeLabel(
+      values.tenant_code,
+      regionTreeOptions.value,
+    );
     const tenantName = extractNameFromLabel(tenantLabel) || values.tenant_code;
     await createTenant({
+      es_pool: values.es_pool ?? null,
       name: tenantName,
       tenant_code: values.tenant_code,
-      es_pool: values.es_pool ?? null,
       mark: values.mark ?? null,
     });
     message.success('创建成功');
@@ -361,6 +395,33 @@ function doReprovision(row: IamTenant) {
       console.error('[IAM Tenant] reprovision failed', error);
     })
     .finally(() => hide());
+}
+
+async function doUpdateStatus(
+  row: IamTenant,
+  target: Extract<TenantStatus, 'active' | 'disabled'>,
+) {
+  if (!row?.tenant_id) return;
+  const hide = message.loading({
+    content:
+      target === 'disabled' ? `正在禁用：${row.name}` : `正在启用：${row.name}`,
+    duration: 0,
+  });
+  try {
+    await updateTenantStatus(row.tenant_id, { status: target });
+    message.success(target === 'disabled' ? '已禁用' : '已启用');
+    gridApi.query();
+  } catch (error: any) {
+    const status = error?.response?.status;
+    if (status === 409) {
+      message.error('状态不可切换，请刷新后重试');
+    } else {
+      message.error('操作失败');
+    }
+    console.error('[IAM Tenant] update status failed', error);
+  } finally {
+    hide();
+  }
 }
 </script>
 

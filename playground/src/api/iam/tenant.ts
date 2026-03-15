@@ -37,6 +37,10 @@ export interface UpdateTenantInput {
   mark?: string | null;
 }
 
+export interface UpdateTenantStatusInput {
+  status: Extract<TenantStatus, 'active' | 'disabled'>;
+}
+
 export async function fetchTenants(params: TenantQuery = {}) {
   const res = await requestClient.get<{ items?: IamTenant[]; total?: number; data?: any }>(
     `${ADMIN_PREFIX}/tenants`,
@@ -58,4 +62,8 @@ export async function updateTenant(tenantId: string, data: UpdateTenantInput) {
 
 export async function reprovisionTenant(tenantId: string) {
   return requestClient.post(`${ADMIN_PREFIX}/tenants/${tenantId}/reprovision`);
+}
+
+export async function updateTenantStatus(tenantId: string, data: UpdateTenantStatusInput) {
+  return requestClient.post(`${ADMIN_PREFIX}/tenants/${tenantId}/status`, data);
 }

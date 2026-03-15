@@ -231,7 +231,14 @@ setupVbenVxeTable({
                 return document.body;
               },
               placement: 'topLeft',
-              title: $t('ui.actionTitle.delete', [attrs?.nameTitle || '']),
+              title:
+                opt.confirmTitle ??
+                $t(
+                  opt.code === 'delete'
+                    ? 'ui.actionTitle.delete'
+                    : 'ui.actionTitle.delete',
+                  [attrs?.nameTitle || ''],
+                ),
               ...props,
               ...opt,
               icon: undefined,
@@ -252,20 +259,24 @@ setupVbenVxeTable({
             },
             {
               default: () => renderBtn({ ...opt }, false),
-              description: () =>
-                h(
-                  'div',
-                  { class: 'truncate' },
-                  $t('ui.actionMessage.deleteConfirm', [
-                    row[attrs?.nameField || 'name'],
-                  ]),
-                ),
+              description: () => {
+                const desc =
+                  typeof opt.confirmMessage === 'function'
+                    ? opt.confirmMessage(row)
+                    : (opt.confirmMessage ??
+                      $t('ui.actionMessage.deleteConfirm', [
+                        row[attrs?.nameField || 'name'],
+                      ]));
+                return h('div', { class: 'truncate' }, desc);
+              },
             },
           );
         }
 
         const btns = operations.map((opt) =>
-          opt.code === 'delete' ? renderConfirm(opt) : renderBtn(opt),
+          opt.popconfirm || opt.code === 'delete'
+            ? renderConfirm(opt)
+            : renderBtn(opt),
         );
         return h(
           'div',
