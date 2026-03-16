@@ -111,13 +111,13 @@ function getColumns(onActionClickFn: OnActionClickFn<IamOrg>) {
       field: 'parent_id',
       title: '上级组织',
       minWidth: 200,
-      formatter: ({ cellValue }) => orgLabel(cellValue),
+      formatter: ({ cellValue }: { cellValue: string | null | undefined }) => orgLabel(cellValue),
     },
     {
       field: 'owner_id',
       title: '负责人',
       minWidth: 200,
-      formatter: ({ cellValue }) => ownerLabel(cellValue),
+      formatter: ({ cellValue }: { cellValue: string | null | undefined }) => ownerLabel(cellValue),
     },
     { field: 'max_members', title: '最大成员', width: 120 },
     {
@@ -225,9 +225,8 @@ async function onSubmitOrg() {
 
 async function loadSelectOptions() {
   try {
-    const [admins, orgs] = await Promise.all([
+    const [admins] = await Promise.all([
       fetchAdminUsers({ limit: 200, offset: 0 }),
-      fetchOrgs({ limit: 200, offset: 0 }),
     ]);
     ownerOptions.value = admins.map((item: IamAdminUser) => ({
       label: `${item.name || item.email} (${item.admin_user_id.slice(0, 8)})`,

@@ -14,7 +14,7 @@ import {
   Notification,
   UserDropdown,
 } from '@vben/layouts';
-import { preferences } from '@vben/preferences';
+import { preferences, updatePreferences } from '@vben/preferences';
 import { useAccessStore, useTabbarStore, useUserStore } from '@vben/stores';
 import { openWindow } from '@vben/utils';
 
@@ -162,6 +162,25 @@ function handleMakeAll() {
 }
 
 function handleClickLogo() {}
+
+watch(
+  () => accessStore.accessMenus.length,
+  (length) => {
+    if (length > 0 && (preferences.header.hidden || preferences.sidebar.hidden)) {
+      updatePreferences({
+        header: {
+          hidden: false,
+        },
+        sidebar: {
+          hidden: false,
+        },
+      });
+    }
+  },
+  {
+    immediate: true,
+  },
+);
 
 watch(
   () => ({

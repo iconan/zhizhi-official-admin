@@ -2,7 +2,7 @@
 import type { VbenFormSchema } from '@vben/common-ui';
 import type { Recordable } from '@vben/types';
 
-import { computed, useTemplateRef } from 'vue';
+import { computed } from 'vue';
 
 import { AuthenticationLogin, z } from '@vben/common-ui';
 import { $t } from '@vben/locales';
@@ -36,17 +36,16 @@ const formSchema = computed((): VbenFormSchema[] => {
   ];
 });
 
-const loginRef =
-  useTemplateRef<InstanceType<typeof AuthenticationLogin>>('loginRef');
-
 async function onSubmit(params: Recordable<any>) {
-  authStore.authLogin(params);
+  authStore.authLogin({
+    login: params.login as string,
+    password: params.password as string,
+  });
 }
 </script>
 
 <template>
   <AuthenticationLogin
-    ref="loginRef"
     :form-schema="formSchema"
     :loading="authStore.loginLoading"
     @submit="onSubmit"

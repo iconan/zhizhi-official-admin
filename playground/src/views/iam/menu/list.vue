@@ -3,15 +3,17 @@ import type {
   OnActionClickParams,
   VxeTableGridOptions,
 } from '#/adapter/vxe-table';
+import type { IamMenu } from '#/api/iam/menu';
+
+import { nextTick, onMounted } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 import { Plus } from '@vben/icons';
+
 import { Button, message, Tag } from 'ant-design-vue';
-import { nextTick, onMounted } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { deleteMenu, fetchMenus } from '#/api/iam/menu';
-import type { IamMenu } from '#/api/iam/menu';
+import { deleteMenu, fetchMenuTree } from '#/api/iam/menu';
 
 import { renderStatus, useColumns } from './data';
 import Form from './modules/form.vue';
@@ -33,17 +35,18 @@ const [Grid, gridApi] = useVbenVxeGrid({
       ajax: {
         query: async () => {
           try {
-            const items = await fetchMenus(true);
-            console.debug('[IAM Menu] fetched items', items?.length ?? 0, items);
-            return items;
+            const items = await fetchMenuTree(true);
+            console.debug(
+              '[IAM Menu] fetched items',
+              items?.length ?? 0,
+              items,
+            );
+            return items as any;
           } catch (error) {
             console.error('[IAM Menu] fetchMenus failed', error);
-            return [];
+            return [] as any;
           }
         },
-      },
-      response: {
-        result: ({ response }) => response,
       },
     },
     rowConfig: {
@@ -75,17 +78,21 @@ onMounted(async () => {
 
 function onActionClick({ code, row }: OnActionClickParams<IamMenu>) {
   switch (code) {
-    case 'append':
+    case 'append': {
       onAppend(row);
       break;
-    case 'delete':
+    }
+    case 'delete': {
       onDelete(row);
       break;
-    case 'edit':
+    }
+    case 'edit': {
       onEdit(row);
       break;
-    default:
+    }
+    default: {
       break;
+    }
   }
 }
 
@@ -122,7 +129,6 @@ function onDelete(row: IamMenu) {
     .catch(() => hideLoading())
     .finally(() => hideLoading());
 }
-
 </script>
 
 <template>

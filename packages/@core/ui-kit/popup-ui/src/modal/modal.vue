@@ -50,12 +50,8 @@ const props = withDefaults(defineProps<Props>(), {
 const components = globalShareState.getComponents();
 
 const contentRef = ref();
-// @ts-expect-error unused
-const wrapperRef = ref<HTMLElement>();
 const dialogRef = ref();
 const headerRef = ref();
-// @ts-expect-error unused
-const footerRef = ref();
 
 const id = useId();
 

@@ -4,6 +4,7 @@ import { LOGIN_PATH } from '@vben/constants';
 import { preferences } from '@vben/preferences';
 
 import { $t } from '#/locales';
+import { useAuthStore } from '#/store';
 
 const BasicLayout = () => import('#/layouts/basic.vue');
 const AuthPageLayout = () => import('#/layouts/auth.vue');
@@ -91,6 +92,21 @@ const coreRoutes: RouteRecordRaw[] = [
         },
       },
     ],
+  },
+  {
+    beforeEnter: async () => {
+      await useAuthStore().logout(false);
+    },
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      ignoreAccess: true,
+      title: 'Logout',
+    },
+    name: 'Logout',
+    path: '/logout',
+    redirect: LOGIN_PATH,
   },
 ];
 

@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { Recordable } from '@vben/types';
+import type { AuthApi } from '#/api/core/auth';
 
 import { useRouter } from 'vue-router';
 
@@ -11,18 +11,18 @@ import { Button, Card } from 'ant-design-vue';
 
 import { useAuthStore } from '#/store';
 
-const accounts: Record<string, Recordable<any>> = {
+const accounts: Record<string, AuthApi.LoginParams> = {
   admin: {
     password: '123456',
-    username: 'admin',
+    login: 'admin',
   },
   super: {
     password: '123456',
-    username: 'vben',
+    login: 'vben',
   },
   user: {
     password: '123456',
-    username: 'jack',
+    login: 'jack',
   },
 };
 

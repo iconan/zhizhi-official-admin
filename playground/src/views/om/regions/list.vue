@@ -1,9 +1,12 @@
 <script lang="ts" setup>
-import type { VxeTableGridOptions, OnActionClickFn } from '#/adapter/vxe-table';
+import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
+import type { Region, RegionActiveStatus } from '#/api/om/region';
+
+import { nextTick, onMounted, ref } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
+
 import { Button, message, Modal, Tag } from 'ant-design-vue';
-import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -12,10 +15,12 @@ import {
   deleteRegion,
   fetchRegions,
   updateRegion,
-  type RegionActiveStatus,
-  type Region,
 } from '#/api/om/region';
-import { getRegionLabelMap, getRegionListCached, getRegionTreeOptions } from '#/store/tree-data';
+import {
+  getRegionLabelMap,
+  getRegionListCached,
+  getRegionTreeOptions,
+} from '#/store/tree-data';
 
 interface RegionOption {
   label: string;
@@ -24,12 +29,12 @@ interface RegionOption {
 
 type RegionStatus = RegionActiveStatus;
 
-type ActionCode = 'edit' | 'delete' | 'status';
+type ActionCode = 'delete' | 'edit' | 'status';
 
 const regionOptions = ref<RegionOption[]>([]);
 const regionMap = ref<Record<string, string>>({});
 const regionTreeOptions = ref<any[]>([]);
-const currentRegionId = ref<string | null>(null);
+const currentRegionId = ref<null | string>(null);
 
 const [FormDrawer, formDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 
@@ -64,7 +69,10 @@ const [RegionForm, regionFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'name',
       label: '名称',
-      rules: z.string({ required_error: '请输入名称' }).min(1, '请输入名称').max(100, '名称过长'),
+      rules: z
+        .string({ required_error: '请输入名称' })
+        .min(1, '请输入名称')
+        .max(100, '名称过长'),
     },
     {
       component: 'Select',
@@ -79,11 +87,16 @@ const [RegionForm, regionFormApi] = useVbenForm({
       },
       rules: z
         .union([
-          z.number({ invalid_type_error: '请选择级别' }).min(1, '请选择级别').max(4, '级别过大'),
+          z
+            .number({ invalid_type_error: '请选择级别' })
+            .min(1, '请选择级别')
+            .max(4, '级别过大'),
           z.null(),
           z.undefined(),
         ])
-        .refine((value) => value !== null && value !== undefined, { message: '请选择级别' }),
+        .refine((value) => value !== null && value !== undefined, {
+          message: '请选择级别',
+        }),
     },
     {
       component: 'TreeSelect',
@@ -106,7 +119,10 @@ const [RegionForm, regionFormApi] = useVbenForm({
       fieldName: 'full_name',
       label: '全称',
       componentProps: { allowClear: true },
-      rules: z.string().max(200, '全称过长').optional(),
+      rules: z
+        .string({ required_error: '请输入全称' })
+        .min(1, '请输入全称')
+        .max(200, '全称过长'),
     },
     {
       component: 'Switch',
@@ -215,8 +231,11 @@ onMounted(async () => {
 async function loadRegionOptions() {
   try {
     const list = await getRegionListCached();
-    const uniqItems = Array.from(new Map(list.map((i) => [i.code, i])).values());
-    regionOptions.value = uniqItems.map((item) => ({ label: `${item.name} (${item.code})`, value: item.code }));
+    const uniqItems = [...new Map(list.map((i) => [i.code, i])).values()];
+    regionOptions.value = uniqItems.map((item) => ({
+      label: `${item.name} (${item.code})`,
+      value: item.code,
+    }));
     regionMap.value = await getRegionLabelMap();
     regionTreeOptions.value = await getRegionTreeOptions();
   } catch (error) {
@@ -227,17 +246,21 @@ async function loadRegionOptions() {
 function onActionClick(params: Parameters<OnActionClickFn<Region>>[0]) {
   const { code, row } = params;
   switch (code as ActionCode) {
-    case 'edit':
-      openDrawer(row);
-      break;
-    case 'delete':
+    case 'delete': {
       confirmDelete(row);
       break;
-    case 'status':
+    }
+    case 'edit': {
+      openDrawer(row);
+      break;
+    }
+    case 'status': {
       toggleStatus(row);
       break;
-    default:
+    }
+    default: {
       break;
+    }
   }
 }
 
@@ -250,13 +273,15 @@ function getColumns(onActionClickFn: OnActionClickFn<Region>) {
       field: 'level',
       title: '级别',
       width: 110,
-      formatter: ({ cellValue }: { cellValue: number }) => levelLabelMap[cellValue] || cellValue,
+      formatter: ({ cellValue }: { cellValue: number }) =>
+        levelLabelMap[cellValue] || cellValue,
     },
     {
       field: 'parent_code',
       title: '上级区域',
       width: 200,
-      formatter: ({ cellValue }: { cellValue: string }) => (cellValue ? regionMap.value[cellValue] || cellValue : ''),
+      formatter: ({ cellValue }: { cellValue: string }) =>
+        cellValue ? regionMap.value[cellValue] || cellValue : '',
     },
     {
       field: 'is_active',
@@ -272,11 +297,7 @@ function getColumns(onActionClickFn: OnActionClickFn<Region>) {
       showOverflow: false,
       cellRender: {
         name: 'CellOperation',
-        options: [
-          { code: 'status', text: '切换状态' },
-          'edit',
-          'delete',
-        ],
+        options: [{ code: 'status', text: '切换状态' }, 'edit', 'delete'],
         attrs: { onClick: onActionClickFn },
       },
     },
@@ -368,7 +389,7 @@ async function toggleStatus(row: Region) {
 }
 
 function renderStatus(status: RegionStatus) {
-  const map: Record<RegionStatus, { text: string; color: string }> = {
+  const map: Record<RegionStatus, { color: string; text: string }> = {
     1: { text: '已启用', color: 'green' },
     [-1]: { text: '已禁用', color: 'red' },
   } as const;
@@ -381,7 +402,7 @@ function renderStatus(status: RegionStatus) {
     <FormDrawer title="行政区域" width="520px">
       <RegionForm class="px-4 pt-4" layout="vertical" />
       <template #footer>
-        <div class="flex justify-end gap-2 pr-4 pb-3">
+        <div class="flex justify-end gap-2 pb-3 pr-4">
           <Button @click="formDrawerApi.close()">取消</Button>
           <Button type="primary" @click="onSubmitRegion">保存</Button>
         </div>

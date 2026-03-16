@@ -18,6 +18,7 @@ export interface RoleQuery {
   offset?: number;
   keyword?: string;
   org_id?: string | null;
+  status?: IamRole['status'];
 }
 
 export interface SaveRoleInput {

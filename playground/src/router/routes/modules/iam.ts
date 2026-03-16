@@ -15,7 +15,7 @@ const routes: RouteRecordRaw[] = [
         name: 'IamMenu',
         meta: {
           title: '菜单管理',
-          icon: 'mdi:menu',
+          icon: 'mdi:view-list-outline',
           ignoreAccess: true,
         },
         component: () => import('#/views/iam/menu/list.vue'),

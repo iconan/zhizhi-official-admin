@@ -29,13 +29,14 @@ const forward = useForwardPropsEmits(props, emit);
 const {
   handleScrollAt,
   handleWheel,
-  // @ts-expect-error unused
   scrollbarRef,
   scrollDirection,
   scrollIsAtLeft,
   scrollIsAtRight,
   showScrollButton,
 } = useTabsViewScroll(props);
+
+defineExpose({ scrollbarRef });
 
 function onWheel(e: WheelEvent) {
   if (props.wheelable) {

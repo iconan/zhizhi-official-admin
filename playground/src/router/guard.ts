@@ -10,6 +10,23 @@ import { useAuthStore } from '#/store';
 
 import { generateAccess } from './access';
 
+function findFirstMenuPath(
+  menus: Array<{ children?: any[]; path?: string }>,
+): string | undefined {
+  for (const menu of menus) {
+    if (menu.children && menu.children.length > 0) {
+      const childPath = findFirstMenuPath(menu.children);
+      if (childPath) {
+        return childPath;
+      }
+    }
+    if (menu.path && menu.path !== '/') {
+      return menu.path;
+    }
+  }
+  return undefined;
+}
+
 /**
  * 通用守卫配置
  * @param router
@@ -101,15 +118,20 @@ function setupAccessGuard(router: Router) {
       routes: accessRoutes,
     });
 
+    console.log('[access] generated accessible routes', accessibleRoutes);
+    console.log('[access] generated accessible menus', accessibleMenus);
+
     // 保存菜单信息和路由信息
     accessStore.setAccessMenus(accessibleMenus);
     accessStore.setAccessRoutes(accessibleRoutes);
     accessStore.setIsAccessChecked(true);
+
+    const firstAccessibleMenuPath = findFirstMenuPath(accessibleMenus);
     let redirectPath: string;
     if (from.query.redirect) {
       redirectPath = from.query.redirect as string;
     } else if (to.fullPath === preferences.app.defaultHomePath) {
-      redirectPath = preferences.app.defaultHomePath;
+      redirectPath = firstAccessibleMenuPath || preferences.app.defaultHomePath;
     } else if (userInfo.homePath && to.fullPath === userInfo.homePath) {
       redirectPath = userInfo.homePath;
     } else {

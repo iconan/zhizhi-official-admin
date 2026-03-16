@@ -4,7 +4,6 @@ import type {
 } from '@vben/types';
 
 import { generateAccessible } from '@vben/access';
-import { preferences } from '@vben/preferences';
 
 import { message } from 'ant-design-vue';
 
@@ -22,7 +21,7 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
     IFrameView,
   };
 
-  return await generateAccessible(preferences.app.accessMode, {
+  return await generateAccessible('backend', {
     ...options,
     fetchMenuListAsync: async () => {
       message.loading({

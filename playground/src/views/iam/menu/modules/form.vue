@@ -176,8 +176,8 @@ onMounted(() => {
 
 async function loadPermissionOptions() {
   try {
-    const list = await fetchPermissions({ limit: 500, offset: 0 });
-    permissionOptions.value = list.map((item: IamPermission) => ({
+    const { items } = await fetchPermissions({ limit: 500, offset: 0 });
+    permissionOptions.value = items.map((item: IamPermission) => ({
       label: `${item.code}（${item.name}）`,
       value: item.code,
     }));

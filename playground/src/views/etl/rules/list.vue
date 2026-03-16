@@ -114,19 +114,13 @@ function onCreate() {
 const onActionClick: OnActionClickFn<RuleItem> = ({ code, row }) => {
   switch (code) {
     case 'edit':
+      ruleFormApi.resetForm();
+      ruleFormApi.setValues(row);
       Modal.confirm({
         title: '编辑规则',
         icon: null,
         content: () => <RuleForm layout="vertical" class="pt-2" />, // jsx
         okText: '保存',
-        onOpenChange: (open) => {
-          if (open) {
-            nextTick(() => {
-              ruleFormApi.resetForm();
-              ruleFormApi.setValues(row);
-            });
-          }
-        },
         onOk: async () => {
           const { valid } = await ruleFormApi.validate();
           if (!valid) return Promise.reject();

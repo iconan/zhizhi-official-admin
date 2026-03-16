@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { Page } from '@vben/common-ui';
-import { Button, Form, Input, InputNumber, Tabs, message } from 'ant-design-vue';
+import { Button, Form, Input, Tabs, message } from 'ant-design-vue';
 import { ref } from 'vue';
 
 import { createJob } from '#/api/etl/jobs';
@@ -54,7 +54,7 @@ async function submitWeb() {
             <Input v-model:value="csvForm.name" placeholder="请输入任务名称" />
           </Form.Item>
           <Form.Item label="描述">
-            <Input.TextArea v-model:value="csvForm.description" rows="3" />
+            <Input.TextArea v-model:value="csvForm.description" :rows="3" />
           </Form.Item>
           <Form.Item label="CSV 文件地址" required>
             <Input v-model:value="csvForm.file_url" placeholder="请输入可访问的 CSV URL" />
@@ -73,7 +73,7 @@ async function submitWeb() {
             <Input v-model:value="webForm.name" placeholder="请输入任务名称" />
           </Form.Item>
           <Form.Item label="描述">
-            <Input.TextArea v-model:value="webForm.description" rows="3" />
+            <Input.TextArea v-model:value="webForm.description" :rows="3" />
           </Form.Item>
           <Form.Item label="起始 URL" required>
             <Input v-model:value="webForm.seed_url" placeholder="请输入起始 URL" />

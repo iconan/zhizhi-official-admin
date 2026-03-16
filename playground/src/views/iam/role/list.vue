@@ -2,7 +2,7 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Button, Select, Tag, message } from 'ant-design-vue';
+import { Button, Tag, message } from 'ant-design-vue';
 import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenForm, z } from '#/adapter/form';
@@ -121,7 +121,7 @@ function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
       field: 'org_id',
       title: '所属组织',
       minWidth: 200,
-      formatter: ({ cellValue }) => orgLabel(cellValue),
+      formatter: ({ cellValue }: { cellValue: string | null | undefined }) => orgLabel(cellValue),
     },
     {
       field: 'permission_codes',
@@ -210,7 +210,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       enabled: true,
       autoLoad: false,
       ajax: {
-        query: async (_params, formValues) => {
+        query: async (_params: any, formValues: any) => {
           try {
             const items = await fetchRoles({
               keyword: formValues?.keyword || undefined,
@@ -219,7 +219,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
             });
             // fetch permissions for each role in parallel
             const withPermissions = await Promise.all(
-              items.map(async (role) => {
+              items.map(async (role: IamRole) => {
                 try {
                   const detail = await fetchRoleDetail(role.role_id);
                   return {

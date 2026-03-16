@@ -5,17 +5,7 @@ import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { fetchJobs, fetchMetricsSummary, replayDeadLetter } from '#/api/etl/jobs';
-import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
-
-interface EtkJob {
-  job_id: string;
-  name: string;
-  status: string;
-  source_type: 'csv' | 'web';
-  last_run_at?: string;
-  next_run_at?: string;
-  created_at?: string;
-}
+import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 
 interface MetricsSummary {
   total_jobs: number;
@@ -134,7 +124,7 @@ async function loadMetrics() {
   }
 }
 
-async function replayDeadLetter() {
+async function triggerReplayDeadLetter() {
   const hide = message.loading({ content: '正在重放死信...', duration: 0 });
   try {
     await replayDeadLetter();
@@ -174,7 +164,7 @@ onMounted(async () => {
     </div>
     <Grid table-title="任务管理">
       <template #toolbar-tools>
-        <Button type="primary" danger ghost @click="replayDeadLetter">批量死信重放</Button>
+        <Button type="primary" danger ghost @click="triggerReplayDeadLetter">批量死信重放</Button>
         <Button type="primary" class="ml-2" @click="$router.push('/etl/tasks/create')">创建任务</Button>
       </template>
     </Grid>

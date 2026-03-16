@@ -28,10 +28,10 @@ const emit = defineEmits<{
 }>();
 const active = defineModel<string>('active');
 
-// @ts-expect-error unused
 const contentRef = ref();
-// @ts-expect-error unused
 const tabRef = ref();
+
+defineExpose({ contentRef, tabRef });
 
 const style = computed(() => {
   const { gap } = props;

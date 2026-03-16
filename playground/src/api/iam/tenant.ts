@@ -2,19 +2,23 @@ import { requestClient } from '#/api/request';
 
 const ADMIN_PREFIX = '/v1/admin';
 
-export type TenantStatus = 'active' | 'disabled' | 'provisioning' | 'provisioning_failed';
+export type TenantStatus =
+  | 'active'
+  | 'disabled'
+  | 'provisioning'
+  | 'provisioning_failed';
 
 export interface IamTenant {
-  tenant_id: string;
-  tenant_code: string;
+  created_at?: null | string;
+  es_pool?: null | number;
+  mark?: null | string;
   name: string;
   schema_name: string;
-  status: TenantStatus;
   schema_version?: string;
-  es_pool?: number | null;
-  mark?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
+  status: TenantStatus;
+  tenant_code: string;
+  tenant_id: string;
+  updated_at?: null | string;
 }
 
 export interface TenantQuery {
@@ -25,16 +29,16 @@ export interface TenantQuery {
 }
 
 export interface CreateTenantInput {
-  tenant_code: string;
+  es_pool?: null | number;
+  mark?: null | string;
   name: string;
-  es_pool?: number | null;
-  mark?: string | null;
+  tenant_code: string;
 }
 
 export interface UpdateTenantInput {
+  es_pool?: null | number;
+  mark?: null | string;
   name: string;
-  es_pool?: number | null;
-  mark?: string | null;
 }
 
 export interface UpdateTenantStatusInput {
@@ -42,10 +46,11 @@ export interface UpdateTenantStatusInput {
 }
 
 export async function fetchTenants(params: TenantQuery = {}) {
-  const res = await requestClient.get<{ items?: IamTenant[]; total?: number; data?: any }>(
-    `${ADMIN_PREFIX}/tenants`,
-    { params },
-  );
+  const res = await requestClient.get<{
+    data?: any;
+    items?: IamTenant[];
+    total?: number;
+  }>(`${ADMIN_PREFIX}/tenants`, { params });
   const payload = (res as any)?.data ?? res ?? {};
   const items = (payload as any)?.items ?? [];
   const total = (payload as any)?.total ?? items.length ?? 0;
@@ -64,6 +69,9 @@ export async function reprovisionTenant(tenantId: string) {
   return requestClient.post(`${ADMIN_PREFIX}/tenants/${tenantId}/reprovision`);
 }
 
-export async function updateTenantStatus(tenantId: string, data: UpdateTenantStatusInput) {
+export async function updateTenantStatus(
+  tenantId: string,
+  data: UpdateTenantStatusInput,
+) {
   return requestClient.post(`${ADMIN_PREFIX}/tenants/${tenantId}/status`, data);
 }
