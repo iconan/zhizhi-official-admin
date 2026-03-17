@@ -37,7 +37,7 @@ const formSchema = computed((): VbenFormSchema[] => {
 });
 
 async function onSubmit(params: Recordable<any>) {
-  authStore.authLogin({
+  await authStore.authLogin({
     login: params.login as string,
     password: params.password as string,
   });

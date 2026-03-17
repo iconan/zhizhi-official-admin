@@ -17,6 +17,7 @@ export namespace AuthApi {
 
   export interface RefreshTokenResult {
     accessToken: string;
+    refreshToken?: string;
   }
 
   export interface PermissionsResult {
@@ -42,13 +43,19 @@ export async function loginApi(data: AuthApi.LoginParams) {
 
 /** 刷新 accessToken */
 export async function refreshTokenApi(refreshToken?: string) {
-  const res = await baseRequestClient.post<{ access_token: string }>(
+  const res = await baseRequestClient.post<{
+    access_token: string;
+    refresh_token?: string;
+  }>(
     `${IAM_PREFIX}/refresh`,
     refreshToken ? { refresh_token: refreshToken } : null,
     { withCredentials: true },
   );
 
-  return { accessToken: res.access_token } satisfies AuthApi.RefreshTokenResult;
+  return {
+    accessToken: res.access_token,
+    refreshToken: res.refresh_token,
+  } satisfies AuthApi.RefreshTokenResult;
 }
 
 /** 退出登录 */
