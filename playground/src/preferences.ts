@@ -9,5 +9,20 @@ export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
     name: import.meta.env.VITE_APP_TITLE,
+    watermark: true,
+    watermarkContent: 'yuwenku.com',
+    enablePreferences: false,
+  },
+  widget: {
+    languageToggle: false,
+    timezone: false,
+    themeToggle: false,
+  },
+  theme: {
+    mode: 'light',
+  },
+  transition: {
+    enable: false,
+    name: 'fade',
   },
 });

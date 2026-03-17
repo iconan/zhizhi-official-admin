@@ -166,7 +166,10 @@ function handleClickLogo() {}
 watch(
   () => accessStore.accessMenus.length,
   (length) => {
-    if (length > 0 && (preferences.header.hidden || preferences.sidebar.hidden)) {
+    if (
+      length > 0 &&
+      (preferences.header.hidden || preferences.sidebar.hidden)
+    ) {
       updatePreferences({
         header: {
           hidden: false,
@@ -219,9 +222,9 @@ onBeforeMount(() => {
       <UserDropdown
         :avatar
         :menus
-        :text="userStore.userInfo?.realName"
-        description="ann.vben@gmail.com"
-        tag-text="Pro"
+        :text="userStore.userInfo?.name"
+        :description="userStore.userInfo?.email"
+        tag-text="YuWen"
         trigger="both"
         @logout="handleLogout"
       />
