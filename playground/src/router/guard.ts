@@ -27,6 +27,30 @@ function findFirstMenuPath(
   return undefined;
 }
 
+function hasMenuPath(
+  menus: Array<{ children?: any[]; path?: string }>,
+  targetPath?: string,
+): boolean {
+  if (!targetPath) {
+    return false;
+  }
+
+  for (const menu of menus) {
+    if (menu.path === targetPath) {
+      return true;
+    }
+    if (
+      menu.children &&
+      menu.children.length > 0 &&
+      hasMenuPath(menu.children, targetPath)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * 通用守卫配置
  * @param router
@@ -40,7 +64,7 @@ function setupCommonGuard(router: Router) {
 
     // 页面加载进度条
     if (!to.meta.loaded && preferences.transition.progress) {
-      startProgress();
+      void startProgress();
     }
     return true;
   });
@@ -51,7 +75,7 @@ function setupCommonGuard(router: Router) {
 
     // 关闭页面加载进度条
     if (preferences.transition.progress) {
-      stopProgress();
+      void stopProgress();
     }
   });
 }
@@ -68,11 +92,7 @@ function setupAccessGuard(router: Router) {
     // 基本路由，这些路由不需要进入权限拦截
     if (coreRouteNames.includes(to.name as string)) {
       if (to.path === LOGIN_PATH && accessStore.accessToken) {
-        return decodeURIComponent(
-          (to.query?.redirect as string) ||
-            userStore.userInfo?.homePath ||
-            preferences.app.defaultHomePath,
-        );
+        return decodeURIComponent((to.query?.redirect as string) || '/');
       }
       return true;
     }
@@ -118,22 +138,25 @@ function setupAccessGuard(router: Router) {
       routes: accessRoutes,
     });
 
-    console.log('[access] generated accessible routes', accessibleRoutes);
-    console.log('[access] generated accessible menus', accessibleMenus);
-
     // 保存菜单信息和路由信息
     accessStore.setAccessMenus(accessibleMenus);
     accessStore.setAccessRoutes(accessibleRoutes);
     accessStore.setIsAccessChecked(true);
 
     const firstAccessibleMenuPath = findFirstMenuPath(accessibleMenus);
+    const hasAccessibleHomePath = hasMenuPath(
+      accessibleMenus,
+      userInfo.homePath,
+    );
     let redirectPath: string;
     if (from.query.redirect) {
       redirectPath = from.query.redirect as string;
     } else if (to.fullPath === preferences.app.defaultHomePath) {
       redirectPath = firstAccessibleMenuPath || preferences.app.defaultHomePath;
     } else if (userInfo.homePath && to.fullPath === userInfo.homePath) {
-      redirectPath = userInfo.homePath;
+      redirectPath = hasAccessibleHomePath
+        ? userInfo.homePath
+        : firstAccessibleMenuPath || preferences.app.defaultHomePath;
     } else {
       redirectPath = to.fullPath;
     }
