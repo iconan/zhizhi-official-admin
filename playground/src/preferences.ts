@@ -9,7 +9,7 @@ export const overridesPreferences = defineOverridesPreferences({
   // overrides
   app: {
     name: import.meta.env.VITE_APP_TITLE,
-    watermark: true,
+    watermark: false,
     watermarkContent: 'yuwenku.com',
     enablePreferences: false,
   },
