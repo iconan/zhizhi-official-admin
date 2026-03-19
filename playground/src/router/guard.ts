@@ -51,6 +51,30 @@ function hasMenuPath(
   return false;
 }
 
+function resolveAuthenticatedRedirectPath({
+  defaultHomePath,
+  firstAccessibleMenuPath,
+  redirect,
+  userHomePath,
+  visibleMenus,
+}: {
+  defaultHomePath: string;
+  firstAccessibleMenuPath?: string;
+  redirect?: string;
+  userHomePath?: string;
+  visibleMenus: Array<{ children?: any[]; path?: string }>;
+}) {
+  if (redirect) {
+    return redirect;
+  }
+
+  if (userHomePath && hasMenuPath(visibleMenus, userHomePath)) {
+    return userHomePath;
+  }
+
+  return firstAccessibleMenuPath || defaultHomePath;
+}
+
 /**
  * 通用守卫配置
  * @param router
@@ -92,7 +116,9 @@ function setupAccessGuard(router: Router) {
     // 基本路由，这些路由不需要进入权限拦截
     if (coreRouteNames.includes(to.name as string)) {
       if (to.path === LOGIN_PATH && accessStore.accessToken) {
-        return decodeURIComponent((to.query?.redirect as string) || '/');
+        return decodeURIComponent(
+          (to.query?.redirect as string) || preferences.app.defaultHomePath,
+        );
       }
       return true;
     }
@@ -144,22 +170,13 @@ function setupAccessGuard(router: Router) {
     accessStore.setIsAccessChecked(true);
 
     const firstAccessibleMenuPath = findFirstMenuPath(accessibleMenus);
-    const hasAccessibleHomePath = hasMenuPath(
-      accessibleMenus,
-      userInfo.homePath,
-    );
-    let redirectPath: string;
-    if (from.query.redirect) {
-      redirectPath = from.query.redirect as string;
-    } else if (to.fullPath === preferences.app.defaultHomePath) {
-      redirectPath = firstAccessibleMenuPath || preferences.app.defaultHomePath;
-    } else if (userInfo.homePath && to.fullPath === userInfo.homePath) {
-      redirectPath = hasAccessibleHomePath
-        ? userInfo.homePath
-        : firstAccessibleMenuPath || preferences.app.defaultHomePath;
-    } else {
-      redirectPath = to.fullPath;
-    }
+    const redirectPath = resolveAuthenticatedRedirectPath({
+      defaultHomePath: preferences.app.defaultHomePath,
+      firstAccessibleMenuPath,
+      redirect: from.query.redirect as string | undefined,
+      userHomePath: userInfo.homePath,
+      visibleMenus: accessibleMenus,
+    });
     return {
       ...router.resolve(decodeURIComponent(redirectPath)),
       replace: true,

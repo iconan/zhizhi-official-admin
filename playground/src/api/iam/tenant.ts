@@ -45,14 +45,16 @@ export interface UpdateTenantStatusInput {
   status: Extract<TenantStatus, 'active' | 'disabled'>;
 }
 
-export async function fetchTenants(params: TenantQuery = {}) {
+export async function fetchTenants(
+  params: TenantQuery = {},
+): Promise<{ items: IamTenant[]; total: number }> {
   const res = await requestClient.get<{
     data?: any;
     items?: IamTenant[];
     total?: number;
   }>(`${ADMIN_PREFIX}/tenants`, { params });
   const payload = (res as any)?.data ?? res ?? {};
-  const items = (payload as any)?.items ?? [];
+  const items = ((payload as any)?.items ?? []) as IamTenant[];
   const total = (payload as any)?.total ?? items.length ?? 0;
   return { items, total };
 }

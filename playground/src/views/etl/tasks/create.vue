@@ -1,45 +1,192 @@
 <script lang="ts" setup>
+import type { SelectProps } from 'ant-design-vue';
+
+import type { ExtractorStrategy } from '#/api/etl/jobs';
+
+import { computed, onMounted, ref } from 'vue';
+
 import { Page } from '@vben/common-ui';
-import { Button, Form, Input, Tabs, message } from 'ant-design-vue';
-import { ref } from 'vue';
+
+import {
+  Button,
+  Card,
+  Col,
+  Form,
+  Input,
+  message,
+  Row,
+  Select,
+  Space,
+  Tabs,
+  Tag,
+} from 'ant-design-vue';
 
 import { createJob } from '#/api/etl/jobs';
+import { fetchTenants } from '#/api/iam/tenant';
 
 const activeTab = ref<'csv' | 'web'>('csv');
+const loadingTenants = ref(false);
+const submitting = ref(false);
+const tenantOptions = ref<SelectProps['options']>([]);
+const defaultChunkSize = 320;
+const extractorStrategyOptions: SelectProps['options'] = [
+  { label: '混合策略（hybrid）', value: 'hybrid' },
+  { label: '托管优先（managed_first）', value: 'managed_first' },
+  { label: '仅规则解析（rules_only）', value: 'rules_only' },
+];
 
-const csvForm = ref({ name: '', description: '', file_url: '', schedule_cron: '' });
-const webForm = ref({ name: '', description: '', seed_url: '', schedule_cron: '' });
+const csvForm = ref({
+  source_name: 'manual_import',
+  csv_path: '',
+  chunk_size: defaultChunkSize,
+  tenant_schema: undefined as string | undefined,
+});
+const webForm = ref({
+  source_name: 'crawler',
+  seed_urls_text: '',
+  chunk_size: defaultChunkSize,
+  extractor_strategy: 'hybrid' as ExtractorStrategy,
+  tenant_schema: undefined as string | undefined,
+});
+
+const activeTenantCount = computed(() => tenantOptions.value?.length ?? 0);
+
+onMounted(async () => {
+  await loadTenantOptions();
+});
+
+async function loadTenantOptions() {
+  loadingTenants.value = true;
+  try {
+    const { items } = await fetchTenants({
+      limit: 200,
+      offset: 0,
+      status: 'active',
+    });
+    tenantOptions.value = items
+      .filter((item) => item.schema_name)
+      .map((item) => ({
+        label: `${item.name} · ${item.schema_name}`,
+        value: item.schema_name,
+      }));
+  } catch (error) {
+    console.error('[ETL Task] load active tenants failed', error);
+    message.error('加载区域列表失败，请稍后重试');
+  } finally {
+    loadingTenants.value = false;
+  }
+}
+
+function validateCommon(form: { tenant_schema?: string }) {
+  if (!form.tenant_schema) {
+    message.warning('请选择所属区域');
+    return false;
+  }
+  return true;
+}
+
+function validateChunkSize(chunkSize: number) {
+  if (!Number.isInteger(chunkSize) || chunkSize < 80 || chunkSize > 1200) {
+    message.warning('分块大小必须在 80~1200 范围内');
+    return false;
+  }
+  return true;
+}
+
+function parseSeedUrls(seedUrlsText: string) {
+  return seedUrlsText
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 async function submitCsv() {
+  if (!validateCommon(csvForm.value)) return;
+  const tenantSchema = csvForm.value.tenant_schema;
+  if (!tenantSchema) return;
+  if (!csvForm.value.csv_path.trim()) {
+    message.warning('请输入 CSV 文件绝对路径');
+    return;
+  }
+  if (!csvForm.value.source_name.trim()) {
+    message.warning('请输入来源名称');
+    return;
+  }
+  if (!csvForm.value.csv_path.trim().startsWith('/')) {
+    message.warning('CSV 文件路径需为绝对路径');
+    return;
+  }
+  if (!csvForm.value.csv_path.trim().endsWith('.csv')) {
+    message.warning('CSV 文件需为 .csv 后缀');
+    return;
+  }
+  if (!validateChunkSize(csvForm.value.chunk_size)) return;
   const payload = {
-    name: csvForm.value.name,
-    description: csvForm.value.description,
-    source: 'csv',
-    csv_url: csvForm.value.file_url,
-    cron: csvForm.value.schedule_cron,
+    source_name: csvForm.value.source_name.trim(),
+    csv_path: csvForm.value.csv_path.trim(),
+    chunk_size: csvForm.value.chunk_size,
+    tenant_schema: tenantSchema,
   };
+  submitting.value = true;
   const hide = message.loading({ content: '创建中...', duration: 0 });
   try {
     await createJob(payload, 'import');
     message.success('创建成功');
+    csvForm.value = {
+      source_name: 'manual_import',
+      csv_path: '',
+      chunk_size: defaultChunkSize,
+      tenant_schema: undefined,
+    };
   } finally {
+    submitting.value = false;
     hide();
   }
 }
 
 async function submitWeb() {
+  if (!validateCommon(webForm.value)) return;
+  const tenantSchema = webForm.value.tenant_schema;
+  if (!tenantSchema) return;
+  const seedUrls = parseSeedUrls(webForm.value.seed_urls_text);
+  if (seedUrls.length === 0) {
+    message.warning('请至少输入一条起始 URL');
+    return;
+  }
+  if (seedUrls.length > 200) {
+    message.warning('起始 URL 最多支持 200 条');
+    return;
+  }
+  if (seedUrls.some((item) => !/^https?:\/\//.test(item))) {
+    message.warning('起始 URL 仅支持 http(s) 地址');
+    return;
+  }
+  if (!validateChunkSize(webForm.value.chunk_size)) return;
+  if (!webForm.value.source_name.trim()) {
+    message.warning('请输入来源名称');
+    return;
+  }
   const payload = {
-    name: webForm.value.name,
-    description: webForm.value.description,
-    source: 'web',
-    web_url: webForm.value.seed_url,
-    cron: webForm.value.schedule_cron,
+    source_name: webForm.value.source_name.trim(),
+    seed_urls: seedUrls,
+    chunk_size: webForm.value.chunk_size,
+    extractor_strategy: webForm.value.extractor_strategy,
+    tenant_schema: tenantSchema,
   };
+  submitting.value = true;
   const hide = message.loading({ content: '创建中...', duration: 0 });
   try {
     await createJob(payload);
     message.success('创建成功');
+    webForm.value = {
+      source_name: 'crawler',
+      seed_urls_text: '',
+      chunk_size: defaultChunkSize,
+      extractor_strategy: 'hybrid',
+      tenant_schema: undefined,
+    };
   } finally {
+    submitting.value = false;
     hide();
   }
 }
@@ -47,45 +194,205 @@ async function submitWeb() {
 
 <template>
   <Page auto-content-height>
-    <Tabs v-model:activeKey="activeTab">
-      <Tabs.TabPane key="csv" tab="CSV 导入">
-        <Form layout="vertical">
-          <Form.Item label="任务名称" required>
-            <Input v-model:value="csvForm.name" placeholder="请输入任务名称" />
-          </Form.Item>
-          <Form.Item label="描述">
-            <Input.TextArea v-model:value="csvForm.description" :rows="3" />
-          </Form.Item>
-          <Form.Item label="CSV 文件地址" required>
-            <Input v-model:value="csvForm.file_url" placeholder="请输入可访问的 CSV URL" />
-          </Form.Item>
-          <Form.Item label="调度 Cron 表达式">
-            <Input v-model:value="csvForm.schedule_cron" placeholder="可选，留空为手动触发" />
-          </Form.Item>
-          <div class="flex justify-end gap-2">
-            <Button type="primary" @click="submitCsv">提交</Button>
+    <div class="mx-auto w-full max-w-screen-2xl px-4 2xl:px-6">
+      <Card
+        :bordered="false"
+        class="mb-4 overflow-hidden rounded-2xl shadow-sm"
+      >
+        <div
+          class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+        >
+          <div class="space-y-2">
+            <div class="text-2xl font-semibold text-[var(--ant-color-text)]">
+              创建采集任务
+            </div>
+            <div class="text-sm text-[var(--ant-color-text-description)]">
+              支持 CSV 导入与网页采集两种任务类型，字段已按后端 ETL
+              管理接口对齐，创建后可在任务管理页继续查看执行状态。
+            </div>
           </div>
-        </Form>
-      </Tabs.TabPane>
-      <Tabs.TabPane key="web" tab="网页采集">
-        <Form layout="vertical">
-          <Form.Item label="任务名称" required>
-            <Input v-model:value="webForm.name" placeholder="请输入任务名称" />
-          </Form.Item>
-          <Form.Item label="描述">
-            <Input.TextArea v-model:value="webForm.description" :rows="3" />
-          </Form.Item>
-          <Form.Item label="起始 URL" required>
-            <Input v-model:value="webForm.seed_url" placeholder="请输入起始 URL" />
-          </Form.Item>
-          <Form.Item label="调度 Cron 表达式">
-            <Input v-model:value="webForm.schedule_cron" placeholder="可选，留空为手动触发" />
-          </Form.Item>
-          <div class="flex justify-end gap-2">
-            <Button type="primary" @click="submitWeb">提交</Button>
-          </div>
-        </Form>
-      </Tabs.TabPane>
-    </Tabs>
+          <Space wrap>
+            <Tag color="processing">已开通区域 {{ activeTenantCount }}</Tag>
+            <Button :loading="loadingTenants" @click="loadTenantOptions">
+              刷新区域列表
+            </Button>
+          </Space>
+        </div>
+      </Card>
+
+      <Row :gutter="[16, 16]">
+        <Col :lg="16" :span="24">
+          <Card :bordered="false" class="rounded-2xl shadow-sm">
+            <Tabs v-model:active-key="activeTab" size="large">
+              <Tabs.TabPane key="csv" tab="CSV 导入">
+                <Form layout="vertical">
+                  <Row :gutter="16">
+                    <Col :span="24">
+                      <Form.Item label="选择所属区域" required>
+                        <Select
+                          v-model:value="csvForm.tenant_schema"
+                          :loading="loadingTenants"
+                          :options="tenantOptions"
+                          allow-clear
+                          placeholder="请选择所属区域"
+                          show-search
+                          option-filter-prop="label"
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item label="来源名称" required>
+                    <Input
+                      v-model:value="csvForm.source_name"
+                      placeholder="例如：manual_import"
+                    />
+                  </Form.Item>
+                  <Form.Item label="CSV 文件绝对路径" required>
+                    <Input
+                      v-model:value="csvForm.csv_path"
+                      placeholder="请输入 CSV 绝对路径，例如：/data/imports/example.csv"
+                    />
+                  </Form.Item>
+                  <Form.Item label="分块大小 chunk_size" required>
+                    <Input
+                      v-model:value="csvForm.chunk_size"
+                      type="number"
+                      placeholder="默认 320，允许范围 80~1200"
+                    />
+                  </Form.Item>
+                  <div class="flex justify-end gap-3">
+                    <Button
+                      @click="
+                        csvForm = {
+                          source_name: 'manual_import',
+                          csv_path: '',
+                          chunk_size: defaultChunkSize,
+                          tenant_schema: undefined,
+                        }
+                      "
+                    >
+                      重置
+                    </Button>
+                    <Button
+                      :loading="submitting"
+                      type="primary"
+                      @click="submitCsv"
+                    >
+                      创建 CSV 任务
+                    </Button>
+                  </div>
+                </Form>
+              </Tabs.TabPane>
+              <Tabs.TabPane key="web" tab="网页采集">
+                <Form layout="vertical">
+                  <Row :gutter="16">
+                    <Col :span="24">
+                      <Form.Item label="选择区域" required>
+                        <Select
+                          v-model:value="webForm.tenant_schema"
+                          :loading="loadingTenants"
+                          :options="tenantOptions"
+                          allow-clear
+                          placeholder="请选择 tenant_schema"
+                          show-search
+                          option-filter-prop="label"
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Form.Item label="来源名称" required>
+                    <Input
+                      v-model:value="webForm.source_name"
+                      placeholder="例如：crawler"
+                    />
+                  </Form.Item>
+                  <Form.Item label="起始 URL 列表" required>
+                    <Input.TextArea
+                      v-model:value="webForm.seed_urls_text"
+                      :rows="5"
+                      placeholder="每行一个 URL，至少一条，例如：https://example.com/news"
+                    />
+                  </Form.Item>
+                  <Form.Item label="分块大小 chunk_size" required>
+                    <Input
+                      v-model:value="webForm.chunk_size"
+                      type="number"
+                      placeholder="默认 320，允许范围 80~1200"
+                    />
+                  </Form.Item>
+                  <Form.Item label="提取策略 extractor_strategy" required>
+                    <Select
+                      v-model:value="webForm.extractor_strategy"
+                      :options="extractorStrategyOptions"
+                      placeholder="请选择提取策略，默认 hybrid"
+                    />
+                  </Form.Item>
+                  <div class="flex justify-end gap-3">
+                    <Button
+                      @click="
+                        webForm = {
+                          source_name: 'crawler',
+                          seed_urls_text: '',
+                          chunk_size: defaultChunkSize,
+                          extractor_strategy: 'hybrid',
+                          tenant_schema: undefined,
+                        }
+                      "
+                    >
+                      重置
+                    </Button>
+                    <Button
+                      :loading="submitting"
+                      type="primary"
+                      @click="submitWeb"
+                    >
+                      创建网页任务
+                    </Button>
+                  </div>
+                </Form>
+              </Tabs.TabPane>
+            </Tabs>
+          </Card>
+        </Col>
+
+        <Col :lg="8" :span="24">
+          <Card :bordered="false" class="rounded-2xl shadow-sm">
+            <div class="mb-4 text-base font-medium">填写说明</div>
+            <div
+              class="space-y-4 text-sm text-[var(--ant-color-text-description)]"
+            >
+              <div>
+                <div class="mb-1 font-medium text-[var(--ant-color-text)]">
+                  选择区域
+                </div>
+                <div>
+                  下拉数据来自 IAM
+                  租户列表，仅展示状态为“已开通”的租户，并使用其 `schema_name`
+                  作为 `tenant_schema` 提交。
+                </div>
+              </div>
+              <div>
+                <div class="mb-1 font-medium text-[var(--ant-color-text)]">
+                  CSV 导入
+                </div>
+                <div>
+                  使用后端可访问的 CSV 绝对路径创建导入任务。`chunk_size`
+                  用于控制正文切块大小，值越小检索更精准，值越大上下文保留更多。
+                </div>
+              </div>
+              <div>
+                <div class="mb-1 font-medium text-[var(--ant-color-text)]">
+                  网页采集
+                </div>
+                <div>
+                  `seed_urls` 需至少一条、每行一个 http(s) 地址；`hybrid`
+                  为默认策略，会先尝试托管提取，失败后再回退到规则解析。
+                </div>
+              </div>
+            </div>
+          </Card>
+        </Col>
+      </Row>
+    </div>
   </Page>
 </template>

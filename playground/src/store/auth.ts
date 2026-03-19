@@ -6,6 +6,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { LOGIN_PATH } from '@vben/constants';
+import { preferences } from '@vben/preferences';
 import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
 
 import { notification } from 'ant-design-vue';
@@ -60,9 +61,10 @@ export const useAuthStore = defineStore('auth', () => {
           await router.replace(router.currentRoute.value.fullPath);
         } else {
           const redirectPath = decodeURIComponent(
-            (router.currentRoute.value.query.redirect as string) || '/',
+            (router.currentRoute.value.query.redirect as string) ||
+              preferences.app.defaultHomePath,
           );
-          onSuccess ? await onSuccess?.() : await router.push(redirectPath);
+          onSuccess ? await onSuccess?.() : await router.replace(redirectPath);
         }
 
         if (userInfo?.realName) {

@@ -3,22 +3,23 @@ import { requestClient } from '#/api/request';
 const ETL_PREFIX = '/v1/admin/etl';
 
 export type JobCreateEndpoint = 'collect/web' | 'import';
+export type ExtractorStrategy = 'hybrid' | 'managed_first' | 'rules_only';
 
 export interface JobQuery {
+  keyword?: string;
   limit?: number;
   offset?: number;
-  keyword?: string;
-  status?: string;
   source?: string;
+  status?: string;
 }
 
 export interface JobInput {
-  name: string;
-  description?: string;
-  source?: string;
-  csv_url?: string;
-  web_url?: string;
-  cron?: string;
+  chunk_size?: number;
+  csv_path?: string;
+  extractor_strategy?: ExtractorStrategy;
+  seed_urls?: string[];
+  source_name?: string;
+  tenant_schema: string;
 }
 
 export async function fetchJobs(params: JobQuery = {}) {
@@ -38,6 +39,9 @@ export async function replayDeadLetter() {
   return requestClient.post(`${ETL_PREFIX}/jobs/replay-dead-letter`);
 }
 
-export async function createJob(payload: JobInput, endpoint: JobCreateEndpoint = 'collect/web') {
+export async function createJob(
+  payload: JobInput,
+  endpoint: JobCreateEndpoint = 'collect/web',
+) {
   return requestClient.post(`${ETL_PREFIX}/${endpoint}`, payload);
 }
