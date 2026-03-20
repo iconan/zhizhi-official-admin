@@ -194,7 +194,7 @@ async function submitWeb() {
 
 <template>
   <Page auto-content-height>
-    <div class="mx-auto w-full max-w-screen-2xl px-4 2xl:px-6">
+    <div class="mx-auto w-full max-w-none px-4 md:px-6 xl:px-10">
       <Card
         :bordered="false"
         class="mb-4 overflow-hidden rounded-2xl shadow-sm"
