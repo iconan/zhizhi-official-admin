@@ -15,6 +15,17 @@ import { defineStore } from 'pinia';
 import { getAccessCodesApi, getUserInfoApi, loginApi, logoutApi } from '#/api';
 import { $t } from '#/locales';
 
+function getSafeDefaultHomePath() {
+  return preferences.app.defaultHomePath === '/' ? '/workspace' : preferences.app.defaultHomePath;
+}
+
+function normalizeRedirectPath(path?: string) {
+  if (!path || path === '/' || path === '/auth' || path === LOGIN_PATH) {
+    return getSafeDefaultHomePath();
+  }
+  return path;
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const accessStore = useAccessStore();
   const userStore = useUserStore();
@@ -58,11 +69,14 @@ export const useAuthStore = defineStore('auth', () => {
 
         if (accessStore.loginExpired) {
           accessStore.setLoginExpired(false);
-          await router.replace(router.currentRoute.value.fullPath);
+          await router.replace(
+            normalizeRedirectPath(router.currentRoute.value.fullPath),
+          );
         } else {
           const redirectPath = decodeURIComponent(
-            (router.currentRoute.value.query.redirect as string) ||
-              preferences.app.defaultHomePath,
+            normalizeRedirectPath(
+              (router.currentRoute.value.query.redirect as string) || getSafeDefaultHomePath(),
+            ),
           );
           onSuccess ? await onSuccess?.() : await router.replace(redirectPath);
         }
@@ -106,7 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
       path: LOGIN_PATH,
       query: redirect
         ? {
-            redirect: encodeURIComponent(router.currentRoute.value.fullPath),
+            redirect: encodeURIComponent(normalizeRedirectPath(router.currentRoute.value.fullPath)),
           }
         : {},
     });

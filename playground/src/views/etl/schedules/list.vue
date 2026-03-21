@@ -11,17 +11,42 @@ import {
   deleteSchedule,
   fetchSchedules,
   runScheduleNow,
-  switchScheduleStatus,
+  triggerDueSchedules,
   updateSchedule,
+  type ScheduleInput,
+  type ScheduleItem,
 } from '#/api/etl/schedules';
+import type { ExtractorStrategy } from '#/api/etl/jobs';
 
-interface ScheduleItem {
-  schedule_id: string;
-  name: string;
-  cron: string;
-  status?: 'active' | 'paused';
-  description?: string;
-  created_at?: string;
+const defaultChunkSize = 320;
+const extractorStrategyOptions = [
+  { label: '混合策略（hybrid）', value: 'hybrid' },
+  { label: '托管优先（managed_first）', value: 'managed_first' },
+  { label: '仅规则解析（rules_only）', value: 'rules_only' },
+];
+
+function parseSeedUrls(value?: string) {
+  return (value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function toSeedUrlsText(value?: string[]) {
+  return value?.join('\n') || '';
+}
+
+function normalizeSchedulePayload(values: Record<string, any>): ScheduleInput {
+  return {
+    chunk_size: Number(values.chunk_size || defaultChunkSize),
+    enabled: values.enabled !== false,
+    extractor_strategy: (values.extractor_strategy || 'hybrid') as ExtractorStrategy,
+    interval_minutes: Number(values.interval_minutes || 60),
+    name: values.name,
+    seed_urls: parseSeedUrls(values.seed_urls_text),
+    source_name: values.source_name,
+    tenant_schema: values.tenant_schema,
+  };
 }
 
 const [ScheduleForm, scheduleFormApi] = useVbenForm({
@@ -35,16 +60,69 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
     },
     {
       component: 'Input',
-      fieldName: 'cron',
-      label: 'Cron 表达式',
-      rules: z.string({ required_error: '请输入 Cron 表达式' }).min(1, '请输入 Cron 表达式').max(200, '过长'),
+      fieldName: 'tenant_schema',
+      label: '所属区域',
+      rules: z.string({ required_error: '请输入所属区域' }).min(1, '请输入所属区域'),
     },
     {
       component: 'Input',
-      fieldName: 'description',
-      label: '描述',
-      componentProps: { type: 'textarea', rows: 3 },
-      rules: z.string().max(500, '过长').optional(),
+      fieldName: 'source_name',
+      label: '来源名称',
+      rules: z.string({ required_error: '请输入来源名称' }).min(1, '请输入来源名称').max(200, '过长'),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'seed_urls_text',
+      label: '起始 URL 列表',
+      componentProps: { rows: 4 },
+      rules: z.string({ required_error: '请至少输入一条起始 URL' }).min(1, '请至少输入一条起始 URL'),
+    },
+    {
+      component: 'Input',
+      fieldName: 'chunk_size',
+      label: '分块大小',
+      componentProps: { type: 'number' },
+      rules: z.coerce.number().min(80, '最小为 80').max(1200, '最大为 1200'),
+    },
+    {
+      component: 'Select',
+      fieldName: 'extractor_strategy',
+      label: '提取策略',
+      defaultValue: 'hybrid',
+      componentProps: {
+        options: extractorStrategyOptions,
+      },
+      rules: z.string({ required_error: '请选择提取策略' }),
+    },
+    {
+      component: 'Input',
+      fieldName: 'interval_minutes',
+      label: '执行间隔（分钟）',
+      componentProps: { type: 'number' },
+      rules: z.coerce.number().min(1, '最小为 1').max(10080, '过大'),
+    },
+    {
+      component: 'Select',
+      fieldName: 'enabled',
+      label: '启用状态',
+      defaultValue: true,
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '停用', value: false },
+        ],
+      },
+      rules: z.boolean(),
+    },
+    {
+      component: 'Input',
+      fieldName: 'tip',
+      label: '填写说明',
+      componentProps: { disabled: true, placeholder: 'seed_urls 支持每行一个 URL，run/trigger-due 后可回到任务列表观察' },
+      dependencies: {
+        show: () => false,
+        triggerFields: ['name'],
+      },
     },
   ],
 });
@@ -53,26 +131,34 @@ const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions: {
     columns: [
       { field: 'name', title: '调度名称', minWidth: 200 },
-      { field: 'cron', title: 'Cron', minWidth: 160 },
-      { field: 'description', title: '描述', minWidth: 220 },
+      { field: 'tenant_schema', title: '所属区域', minWidth: 160 },
+      { field: 'source_name', title: '来源名称', minWidth: 140 },
+      { field: 'chunk_size', title: '分块大小', width: 120 },
+      { field: 'extractor_strategy', title: '提取策略', minWidth: 180 },
+      { field: 'interval_minutes', title: '间隔(分钟)', width: 120 },
       {
-        field: 'status',
+        field: 'enabled',
         title: '状态',
         width: 120,
-        slots: { default: 'status' },
+        slots: { default: 'enabled' },
       },
+      { field: 'last_run_at', title: '最近执行', minWidth: 180 },
+      { field: 'next_run_at', title: '下次执行', minWidth: 180 },
       { field: 'created_at', title: '创建时间', minWidth: 180 },
       {
         title: '操作',
         field: 'operation',
-        width: 240,
+        width: 300,
         fixed: 'right',
         showOverflow: false,
         cellRender: {
+          attrs: {
+            onClick: onActionClick,
+          },
           name: 'CellOperation',
           options: [
             { code: 'run', text: '立即运行' },
-            { code: 'status', text: '切换状态' },
+            { code: 'toggleEnabled', text: '切换启用' },
             'edit',
             'delete',
           ],
@@ -86,18 +172,15 @@ const [Grid, gridApi] = useVbenVxeGrid({
       enabled: true,
       autoLoad: false,
       ajax: {
-        query: async ({ page }: any, formValues: any) => {
+        query: async ({ page }: any) => {
           try {
             const limit = page?.pageSize || 20;
             const offset = ((page?.currentPage || 1) - 1) * limit;
-            const { items, total } = await fetchSchedules({
-              limit,
-              offset,
-              keyword: formValues?.keyword || undefined,
-            });
+            const { items, total } = await fetchSchedules({ limit, offset });
             return { items, total } as any;
           } catch (error) {
             console.error('[ETK] fetch schedules failed', error);
+            message.error('加载调度列表失败，请稍后重试');
             return { items: [], total: 0 } as any;
           }
         },
@@ -106,21 +189,17 @@ const [Grid, gridApi] = useVbenVxeGrid({
     rowConfig: { keyField: 'schedule_id' },
     toolbarConfig: { custom: true, export: false, refresh: true, zoom: true },
   } as VxeTableGridOptions,
-  formOptions: {
-    submitOnChange: true,
-    schema: [
-      {
-        component: 'Input',
-        fieldName: 'keyword',
-        label: '关键词',
-        componentProps: { allowClear: true, placeholder: '名称' },
-      },
-    ],
-  },
 });
 
 function onCreate() {
   scheduleFormApi.resetForm();
+  scheduleFormApi.setValues({
+    chunk_size: defaultChunkSize,
+    enabled: true,
+    extractor_strategy: 'hybrid',
+    interval_minutes: 60,
+    source_name: 'web-schedule',
+  });
   Modal.confirm({
     title: '新增调度',
     icon: null,
@@ -129,19 +208,29 @@ function onCreate() {
     onOk: async () => {
       const { valid } = await scheduleFormApi.validate();
       if (!valid) return Promise.reject();
-      const values = await scheduleFormApi.getValues<ScheduleItem>();
-      await createSchedule({ name: values.name, cron: values.cron, description: values.description });
+      const values = await scheduleFormApi.getValues<Record<string, any>>();
+      await createSchedule(normalizeSchedulePayload(values));
       message.success('创建成功');
       await gridApi.query();
     },
+    width: 720,
   });
 }
 
-const onActionClick: OnActionClickFn<ScheduleItem> = ({ code, row }) => {
+function onActionClick({ code, row }: Parameters<OnActionClickFn<ScheduleItem>>[0]) {
   switch (code) {
     case 'edit':
       scheduleFormApi.resetForm();
-      scheduleFormApi.setValues(row);
+      scheduleFormApi.setValues({
+        chunk_size: row.chunk_size ?? defaultChunkSize,
+        enabled: row.enabled ?? true,
+        extractor_strategy: row.extractor_strategy ?? 'hybrid',
+        interval_minutes: row.interval_minutes ?? 60,
+        name: row.name,
+        seed_urls_text: toSeedUrlsText(row.seed_urls),
+        source_name: row.source_name ?? 'web-schedule',
+        tenant_schema: row.tenant_schema,
+      });
       Modal.confirm({
         title: '编辑调度',
         icon: null,
@@ -150,11 +239,12 @@ const onActionClick: OnActionClickFn<ScheduleItem> = ({ code, row }) => {
         onOk: async () => {
           const { valid } = await scheduleFormApi.validate();
           if (!valid) return Promise.reject();
-          const values = await scheduleFormApi.getValues<ScheduleItem>();
-          await updateSchedule(row.schedule_id, { name: values.name, cron: values.cron, description: values.description });
+          const values = await scheduleFormApi.getValues<Record<string, any>>();
+          await updateSchedule(row.schedule_id, normalizeSchedulePayload(values));
           message.success('更新成功');
           await gridApi.query();
         },
+        width: 720,
       });
       break;
     case 'delete':
@@ -168,8 +258,8 @@ const onActionClick: OnActionClickFn<ScheduleItem> = ({ code, row }) => {
         },
       });
       break;
-    case 'status':
-      toggleStatus(row);
+    case 'toggleEnabled':
+      toggleEnabled(row);
       break;
     case 'run':
       runNow(row);
@@ -177,15 +267,17 @@ const onActionClick: OnActionClickFn<ScheduleItem> = ({ code, row }) => {
     default:
       break;
   }
-};
+}
 
-async function toggleStatus(row: ScheduleItem) {
-  const next = row.status === 'active' ? 'paused' : 'active';
+async function toggleEnabled(row: ScheduleItem) {
   const hide = message.loading({ content: '切换状态中...', duration: 0 });
   try {
-    await switchScheduleStatus(row.schedule_id, next);
+    await updateSchedule(row.schedule_id, { enabled: !row.enabled });
     message.success('状态已更新');
     await gridApi.query();
+  } catch (error) {
+    console.error('[ETK] toggle schedule enabled failed', error);
+    message.error('状态更新失败，请稍后重试');
   } finally {
     hide();
   }
@@ -196,6 +288,26 @@ async function runNow(row: ScheduleItem) {
   try {
     await runScheduleNow(row.schedule_id);
     message.success('已触发');
+    await gridApi.query();
+  } catch (error) {
+    console.error('[ETK] run schedule now failed', error);
+    message.error('触发失败，请稍后重试');
+  } finally {
+    hide();
+  }
+}
+
+async function triggerDue() {
+  const hide = message.loading({ content: '正在触发到期任务...', duration: 0 });
+  try {
+    const res = await triggerDueSchedules(20);
+    const data = (res as any)?.data ?? res;
+    const payload = data?.data ?? data ?? {};
+    message.success(`已触发 ${payload?.triggered ?? 0} 个到期调度`);
+    await gridApi.query();
+  } catch (error) {
+    console.error('[ETK] trigger due schedules failed', error);
+    message.error('触发到期任务失败，请稍后重试');
   } finally {
     hide();
   }
@@ -208,13 +320,14 @@ onMounted(() => {
 
 <template>
   <Page auto-content-height>
-    <Grid table-title="定时采集" @action-click="onActionClick">
+    <Grid table-title="定时采集">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增调度</Button>
+        <Button class="ml-2" @click="triggerDue">触发到期任务</Button>
       </template>
-      <template #status="{ row }">
-        <Tag :color="row.status === 'active' ? 'green' : 'orange'">
-          {{ row.status === 'active' ? '已启用' : '已暂停' }}
+      <template #enabled="{ row }">
+        <Tag :color="row.enabled ? 'green' : 'orange'">
+          {{ row.enabled ? '已启用' : '已停用' }}
         </Tag>
       </template>
     </Grid>

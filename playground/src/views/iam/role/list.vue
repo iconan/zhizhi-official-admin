@@ -1,23 +1,30 @@
 <script lang="ts" setup>
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
+import type { IamPermission } from '#/api/iam/permission';
+import type { IamRole } from '#/api/iam/role';
+
+import { nextTick, onMounted, ref } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Button, Tag, message } from 'ant-design-vue';
-import { nextTick, onMounted, ref } from 'vue';
+
+import { Button, message, Tag } from 'ant-design-vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import { fetchPermissions } from '#/api/iam/permission';
 import {
   bindRolePermissions,
   createRole,
   fetchRoleDetail,
   fetchRoles,
-  type IamRole,
   updateRole,
   updateRoleStatus,
 } from '#/api/iam/role';
-import { fetchPermissions, type IamPermission } from '#/api/iam/permission';
-import { getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
+import {
+  getActiveOrgOptions,
+  getActiveOrgTreeOptions,
+  getAllOrgOptions,
+} from '#/store/tree-data';
 
 type RoleStatus = IamRole['status'];
 
@@ -69,7 +76,10 @@ const [RoleForm, roleFormApi] = useVbenForm({
         filterTreeNode: (input: string, node: any) =>
           (node?.label as string)?.toLowerCase()?.includes(input.toLowerCase()),
       },
-      rules: z.string({ required_error: '请选择所属组织' }).min(1, '请选择所属组织').max(200, '过长'),
+      rules: z
+        .string({ required_error: '请选择所属组织' })
+        .min(1, '请选择所属组织')
+        .max(200, '过长'),
     },
   ],
 });
@@ -98,17 +108,21 @@ const [BindForm, bindFormApi] = useVbenForm({
 
 const onActionClick: OnActionClickFn<IamRole> = ({ code, row }) => {
   switch (code) {
-    case 'edit':
-      openForm(row);
-      break;
-    case 'status':
-      toggleStatus(row);
-      break;
-    case 'bind':
+    case 'bind': {
       openBind(row);
       break;
-    default:
+    }
+    case 'edit': {
+      openForm(row);
       break;
+    }
+    case 'status': {
+      toggleStatus(row);
+      break;
+    }
+    default: {
+      break;
+    }
   }
 };
 
@@ -121,7 +135,8 @@ function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
       field: 'org_id',
       title: '所属组织',
       minWidth: 200,
-      formatter: ({ cellValue }: { cellValue: string | null | undefined }) => orgLabel(cellValue),
+      formatter: ({ cellValue }: { cellValue: null | string | undefined }) =>
+        orgLabel(cellValue),
     },
     {
       field: 'permission_codes',
@@ -180,7 +195,9 @@ const [Grid, gridApi] = useVbenVxeGrid({
           style: { width: '100%' },
           dropdownMatchSelectWidth: false,
           filterTreeNode: (input: string, node: any) =>
-            (node?.label as string)?.toLowerCase()?.includes(input.toLowerCase()),
+            (node?.label as string)
+              ?.toLowerCase()
+              ?.includes(input.toLowerCase()),
         },
       },
       {
@@ -205,43 +222,48 @@ const [Grid, gridApi] = useVbenVxeGrid({
     columns: getColumns(onActionClick),
     height: 'auto',
     keepSource: true,
-    pagerConfig: { enabled: false },
+    pagerConfig: { enabled: true, pageSize: 20, pageSizes: [10, 20, 50, 100] },
     proxyConfig: {
       enabled: true,
       autoLoad: false,
       ajax: {
-        query: async (_params: any, formValues: any) => {
+        query: async ({ page }: any, formValues: any) => {
           try {
-            const items = await fetchRoles({
+            const limit = page?.pageSize || 20;
+            const offset = ((page?.currentPage || 1) - 1) * limit;
+            const { items, total } = await fetchRoles({
               keyword: formValues?.keyword || undefined,
+              limit,
+              offset,
               org_id: formValues?.org_id || undefined,
               status: formValues?.status || undefined,
             });
-            // fetch permissions for each role in parallel
             const withPermissions = await Promise.all(
               items.map(async (role: IamRole) => {
                 try {
                   const detail = await fetchRoleDetail(role.role_id);
                   return {
                     ...role,
+                    ...((detail as any) ?? {}),
                     permission_codes:
-                      (detail as any)?.permission_codes || (detail as any)?.permissions,
+                      (detail as any)?.permission_codes ||
+                      (detail as any)?.permissions ||
+                      (role as any)?.permission_codes ||
+                      (role as any)?.permissions,
                   };
-                } catch (e) {
-                  console.error('[IAM Role] fetchRoleDetail failed', role.role_id, e);
+                } catch (error) {
+                  console.error('[IAM Role] fetchRoleDetail failed', role.role_id, error);
                   return role;
                 }
               }),
             );
-            return withPermissions;
+            return { items: withPermissions, total } as any;
           } catch (error) {
             console.error('[IAM Role] fetchRoles failed', error);
-            return [];
+            message.error('加载角色列表失败，请稍后重试');
+            return { items: [], total: 0 } as any;
           }
         },
-      },
-      response: {
-        result: ({ response }: any) => response,
       },
     } as any,
     rowConfig: { keyField: 'role_id' },
@@ -268,6 +290,7 @@ async function loadPermissionOptions() {
     }));
   } catch (error) {
     console.error('[IAM Role] fetchPermissions failed', error);
+    message.error('加载权限选项失败，请稍后重试');
   }
 }
 
@@ -278,10 +301,11 @@ async function loadOrgOptions() {
     orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
     console.error('[IAM Role] fetchOrgs failed', error);
+    message.error('加载组织选项失败，请稍后重试');
   }
 }
 
-function orgLabel(id?: string | null) {
+function orgLabel(id?: null | string) {
   if (!id) return '';
   return orgOptionsAll.value.find((item) => item.value === id)?.label ?? id;
 }
@@ -291,7 +315,9 @@ function permissionLabel(item: any) {
   // backend may return string codes or objects like { code, name }
   const code = typeof item === 'string' ? item : item.code;
   const name = typeof item === 'string' ? undefined : item.name;
-  const optionLabel = permissionOptions.value.find((opt) => opt.value === code)?.label;
+  const optionLabel = permissionOptions.value.find(
+    (opt) => opt.value === code,
+  )?.label;
   if (name && code) return `${code}（${name}）`;
   return optionLabel ?? code ?? '';
 }
@@ -330,7 +356,7 @@ async function onSubmitRole() {
 }
 
 function renderStatus(status: RoleStatus) {
-  const map: Record<RoleStatus, { text: string; color: string }> = {
+  const map: Record<RoleStatus, { color: string; text: string }> = {
     active: { text: '已启用', color: 'green' },
     disabled: { text: '已禁用', color: 'red' },
   } as const;
@@ -338,12 +364,17 @@ function renderStatus(status: RoleStatus) {
 }
 
 function toggleStatus(row: IamRole) {
-  const nextStatus: RoleStatus = row.status === 'active' ? 'disabled' : 'active';
+  const nextStatus: RoleStatus =
+    row.status === 'active' ? 'disabled' : 'active';
   const hide = message.loading({ content: '正在更新状态', duration: 0 });
   updateRoleStatus(row.role_id, nextStatus)
     .then(() => {
       message.success('状态已更新');
       gridApi.query();
+    })
+    .catch((error) => {
+      console.error('[IAM Role] update status failed', error);
+      message.error('更新失败，请稍后重试');
     })
     .finally(() => hide());
 }
@@ -353,7 +384,8 @@ function openBind(row: IamRole) {
   bindDrawerApi.open();
   nextTick(() => {
     bindFormApi.resetForm();
-    const codes = (row as any)?.permission_codes || (row as any)?.permissions || [];
+    const codes =
+      (row as any)?.permission_codes || (row as any)?.permissions || [];
     const normalized = (codes as any[]).map((item) =>
       typeof item === 'string' ? item : item.code,
     );
@@ -367,7 +399,10 @@ async function onSubmitBind() {
   bindDrawerApi.lock();
   const values = await bindFormApi.getValues<{ permission_codes: string[] }>();
   try {
-    await bindRolePermissions(bindTarget.value.role_id, values.permission_codes);
+    await bindRolePermissions(
+      bindTarget.value.role_id,
+      values.permission_codes,
+    );
     message.success('绑定成功');
     bindDrawerApi.close();
     gridApi.query();
@@ -382,7 +417,7 @@ async function onSubmitBind() {
     <FormDrawer :title="currentRole ? '编辑角色' : '新增角色'">
       <RoleForm class="mx-4" layout="vertical" />
       <template #footer>
-        <div class="flex justify-end gap-2 pr-4 pb-2">
+        <div class="flex justify-end gap-2 pb-2 pr-4">
           <Button @click="formDrawerApi.close()">取消</Button>
           <Button type="primary" @click="onSubmitRole">保存</Button>
         </div>
@@ -392,7 +427,7 @@ async function onSubmitBind() {
     <BindDrawer :title="`绑定权限 - ${bindTarget?.name ?? ''}`">
       <BindForm class="mx-4" layout="vertical" />
       <template #footer>
-        <div class="flex justify-end gap-2 pr-4 pb-2">
+        <div class="flex justify-end gap-2 pb-2 pr-4">
           <Button @click="bindDrawerApi.close()">取消</Button>
           <Button type="primary" @click="onSubmitBind">保存</Button>
         </div>
@@ -412,7 +447,7 @@ async function onSubmitBind() {
       <template #permissions="{ row }">
         <div class="flex flex-wrap gap-1">
           <Tag
-            v-if="!(row.permission_codes?.length) && !(row.permissions?.length)"
+            v-if="!row.permission_codes?.length && !row.permissions?.length"
             color="default"
           >
             -

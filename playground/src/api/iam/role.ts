@@ -33,7 +33,11 @@ export async function fetchRoles(params: RoleQuery = {}) {
     `${IAM_PREFIX}/roles`,
     { params },
   );
-  return (res as any)?.items ?? (res as any)?.data?.items ?? (res as any)?.data ?? [];
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  const items = ((payload as any)?.items ?? []) as IamRole[];
+  const total = (payload as any)?.total ?? items.length ?? 0;
+  return { items, total } as { items: IamRole[]; total: number };
 }
 
 export async function fetchRoleDetail(roleId: string) {

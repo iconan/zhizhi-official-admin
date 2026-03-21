@@ -1,20 +1,48 @@
 <script lang="tsx" setup>
-import { Page } from '@vben/common-ui';
-import { Button, Modal, message } from 'ant-design-vue';
+import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
+import type { RuleInput, RuleItem } from '#/api/etl/rules';
+
 import { nextTick, onMounted } from 'vue';
+
+import { Page } from '@vben/common-ui';
+
+import { Button, message, Modal, Tag } from 'ant-design-vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
-import { createRule, deleteRule, fetchRules, updateRule } from '#/api/etl/rules';
+import {
+  createRule,
+  deleteRule,
+  fetchRules,
+  updateRule,
+} from '#/api/etl/rules';
 
-interface RuleItem {
-  rule_id: string;
-  name: string;
-  description?: string;
-  status?: string;
-  created_at?: string;
-  updated_at?: string;
+function parseLineValues(value?: string) {
+  return (value || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function toTextValue(value?: string[]) {
+  return value?.join('\n') || '';
+}
+
+function normalizeRulePayload(values: Record<string, any>): RuleInput {
+  return {
+    author_selectors: parseLineValues(values.author_selectors),
+    content_selectors: parseLineValues(values.content_selectors),
+    date_selectors: parseLineValues(values.date_selectors),
+    enabled: values.enabled !== false,
+    host_pattern: values.host_pattern,
+    name: values.name,
+    priority: Number(values.priority || 100),
+    rollout_percent: Number(values.rollout_percent || 100),
+    rollout_tenant_schemas: parseLineValues(values.rollout_tenant_schemas),
+    source_selectors: parseLineValues(values.source_selectors),
+    title_selectors: parseLineValues(values.title_selectors),
+    version: Number(values.version || 1),
+  };
 }
 
 const [RuleForm, ruleFormApi] = useVbenForm({
@@ -24,14 +52,108 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'name',
       label: '规则名称',
-      rules: z.string({ required_error: '请输入规则名称' }).min(1, '请输入规则名称').max(200, '过长'),
+      rules: z
+        .string({ required_error: '请输入规则名称' })
+        .min(1, '请输入规则名称')
+        .max(200, '过长'),
     },
     {
       component: 'Input',
-      fieldName: 'description',
-      label: '描述',
-      componentProps: { type: 'textarea', rows: 3 },
-      rules: z.string().max(500, '过长').optional(),
+      fieldName: 'host_pattern',
+      label: 'Host 匹配规则',
+      rules: z
+        .string({ required_error: '请输入 Host 匹配规则' })
+        .min(1, '请输入 Host 匹配规则')
+        .max(500, '过长'),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'title_selectors',
+      label: '标题选择器',
+      componentProps: { rows: 3 },
+      rules: z.string().optional(),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'content_selectors',
+      label: '正文选择器',
+      componentProps: { rows: 3 },
+      rules: z.string().optional(),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'date_selectors',
+      label: '日期选择器',
+      componentProps: { rows: 3 },
+      rules: z.string().optional(),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'source_selectors',
+      label: '来源选择器',
+      componentProps: { rows: 3 },
+      rules: z.string().optional(),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'author_selectors',
+      label: '作者选择器',
+      componentProps: { rows: 3 },
+      rules: z.string().optional(),
+    },
+    {
+      component: 'Input',
+      fieldName: 'priority',
+      label: '优先级',
+      componentProps: { type: 'number' },
+      rules: z.coerce.number().min(0, '不能小于 0').max(9999, '过大'),
+    },
+    {
+      component: 'Select',
+      fieldName: 'enabled',
+      label: '启用状态',
+      defaultValue: true,
+      componentProps: {
+        options: [
+          { label: '启用', value: true },
+          { label: '停用', value: false },
+        ],
+      },
+      rules: z.boolean(),
+    },
+    {
+      component: 'Input',
+      fieldName: 'version',
+      label: '版本号',
+      componentProps: { type: 'number' },
+      rules: z.coerce.number().min(1, '最小为 1').max(999, '过大'),
+    },
+    {
+      component: 'Textarea',
+      fieldName: 'rollout_tenant_schemas',
+      label: '灰度租户',
+      componentProps: { rows: 3 },
+      rules: z.string().optional(),
+    },
+    {
+      component: 'Input',
+      fieldName: 'rollout_percent',
+      label: '灰度百分比',
+      componentProps: { type: 'number' },
+      rules: z.coerce.number().min(1, '最小为 1').max(100, '最大为 100'),
+    },
+    {
+      component: 'Input',
+      fieldName: 'name_preview',
+      label: '填写说明',
+      componentProps: {
+        disabled: true,
+        placeholder: '选择器字段支持每行一个值',
+      },
+      dependencies: {
+        show: () => false,
+        triggerFields: ['name'],
+      },
     },
   ],
 });
@@ -40,14 +162,25 @@ const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions: {
     columns: [
       { field: 'name', title: '规则名称', minWidth: 200 },
-      { field: 'description', title: '描述', minWidth: 220 },
-      { field: 'created_at', title: '创建时间', minWidth: 180 },
+      { field: 'host_pattern', title: 'Host 匹配规则', minWidth: 220 },
+      { field: 'priority', title: '优先级', width: 100 },
+      { field: 'version', title: '版本', width: 90 },
+      { field: 'rollout_percent', title: '灰度%', width: 100 },
+      {
+        field: 'enabled',
+        title: '状态',
+        width: 100,
+        slots: { default: 'enabled' },
+      },
       {
         title: '操作',
         field: 'operation',
         width: 200,
         fixed: 'right',
         cellRender: {
+          attrs: {
+            onClick: onActionClick,
+          },
           name: 'CellOperation',
           options: ['edit', 'delete'],
         },
@@ -60,92 +193,102 @@ const [Grid, gridApi] = useVbenVxeGrid({
       enabled: true,
       autoLoad: false,
       ajax: {
-        query: async ({ page }: any, formValues: any) => {
+        query: async ({ page }: any) => {
           try {
             const limit = page?.pageSize || 20;
             const offset = ((page?.currentPage || 1) - 1) * limit;
-            const { items, total } = await fetchRules({
-              limit,
-              offset,
-              keyword: formValues?.keyword || undefined,
-            });
+            const { items, total } = await fetchRules({ limit, offset });
             return { items, total } as any;
           } catch (error) {
             console.error('[ETK] fetch rules failed', error);
+            message.error('加载规则列表失败，请稍后重试');
             return { items: [], total: 0 } as any;
           }
         },
       },
     },
-    rowConfig: { keyField: 'rule_id' },
+    rowConfig: { keyField: 'id' },
     toolbarConfig: { custom: true, export: false, refresh: true, zoom: true },
   } as VxeTableGridOptions,
-  formOptions: {
-    submitOnChange: true,
-    schema: [
-      {
-        component: 'Input',
-        fieldName: 'keyword',
-        label: '关键词',
-        componentProps: { allowClear: true, placeholder: '规则名称' },
-      },
-    ],
-  },
 });
 
 function onCreate() {
   ruleFormApi.resetForm();
+  ruleFormApi.setValues({
+    enabled: true,
+    priority: 100,
+    rollout_percent: 100,
+    version: 1,
+  });
   Modal.confirm({
     title: '新增规则',
     icon: null,
-    content: () => <RuleForm layout="vertical" class="pt-2" />, // jsx
+    content: () => <RuleForm class="pt-2" layout="vertical" />, // jsx
     okText: '保存',
     onOk: async () => {
       const { valid } = await ruleFormApi.validate();
-      if (!valid) return Promise.reject();
-      const values = await ruleFormApi.getValues<RuleItem>();
-      await createRule({ name: values.name, description: values.description });
+      if (!valid) throw undefined;
+      const values = await ruleFormApi.getValues<Record<string, any>>();
+      await createRule(normalizeRulePayload(values));
       message.success('创建成功');
       await gridApi.query();
     },
+    width: 720,
   });
 }
 
-const onActionClick: OnActionClickFn<RuleItem> = ({ code, row }) => {
+function onActionClick({ code, row }: Parameters<OnActionClickFn<RuleItem>>[0]) {
   switch (code) {
-    case 'edit':
-      ruleFormApi.resetForm();
-      ruleFormApi.setValues(row);
-      Modal.confirm({
-        title: '编辑规则',
-        icon: null,
-        content: () => <RuleForm layout="vertical" class="pt-2" />, // jsx
-        okText: '保存',
-        onOk: async () => {
-          const { valid } = await ruleFormApi.validate();
-          if (!valid) return Promise.reject();
-          const values = await ruleFormApi.getValues<RuleItem>();
-          await updateRule(row.rule_id, { name: values.name, description: values.description });
-          message.success('更新成功');
-          await gridApi.query();
-        },
-      });
-      break;
-    case 'delete':
+    case 'delete': {
       Modal.confirm({
         title: '确认删除该规则？',
         okType: 'danger',
         onOk: async () => {
-          await deleteRule(row.rule_id);
+          await deleteRule(row.id);
           message.success('删除成功');
           await gridApi.query();
         },
       });
       break;
-    default:
+    }
+    case 'edit': {
+      ruleFormApi.resetForm();
+      ruleFormApi.setValues({
+        author_selectors: toTextValue(row.author_selectors),
+        content_selectors: toTextValue(row.content_selectors),
+        date_selectors: toTextValue(row.date_selectors),
+        enabled: row.enabled ?? true,
+        host_pattern: row.host_pattern,
+        name: row.name,
+        priority: row.priority ?? 100,
+        rollout_percent: row.rollout_percent ?? 100,
+        rollout_tenant_schemas: toTextValue(row.rollout_tenant_schemas),
+        source_selectors: toTextValue(row.source_selectors),
+        title_selectors: toTextValue(row.title_selectors),
+        version: row.version ?? 1,
+      });
+      Modal.confirm({
+        title: '编辑规则',
+        icon: null,
+        content: () => <RuleForm class="pt-2" layout="vertical" />, // jsx
+        okText: '保存',
+        onOk: async () => {
+          const { valid } = await ruleFormApi.validate();
+          if (!valid) throw undefined;
+          const values = await ruleFormApi.getValues<Record<string, any>>();
+          await updateRule(row.id, normalizeRulePayload(values));
+          message.success('更新成功');
+          await gridApi.query();
+        },
+        width: 720,
+      });
       break;
+    }
+    default: {
+      break;
+    }
   }
-};
+}
 
 onMounted(() => {
   nextTick(() => gridApi.query());
@@ -154,9 +297,14 @@ onMounted(() => {
 
 <template>
   <Page auto-content-height>
-    <Grid table-title="抽取规则" @action-click="onActionClick">
+    <Grid table-title="抽取规则">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增规则</Button>
+      </template>
+      <template #enabled="{ row }">
+        <Tag :color="row.enabled ? 'success' : 'default'">
+          {{ row.enabled ? '启用' : '停用' }}
+        </Tag>
       </template>
     </Grid>
   </Page>

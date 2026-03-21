@@ -5,10 +5,20 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 import { startProgress, stopProgress } from '@vben/utils';
 
+import { message } from 'ant-design-vue';
+
 import { accessRoutes, coreRouteNames } from '#/router/routes';
 import { useAuthStore } from '#/store';
 
 import { generateAccess } from './access';
+
+function getSafeDefaultHomePath() {
+  return preferences.app.defaultHomePath === '/' ? '/workspace' : preferences.app.defaultHomePath;
+}
+
+function isUnsafeRedirectPath(path?: string) {
+  return !path || path === '/' || path === '/auth' || path === LOGIN_PATH;
+}
 
 function findFirstMenuPath(
   menus: Array<{ children?: any[]; path?: string }>,
@@ -52,27 +62,40 @@ function hasMenuPath(
 }
 
 function resolveAuthenticatedRedirectPath({
-  defaultHomePath,
   firstAccessibleMenuPath,
   redirect,
+  targetPath,
   userHomePath,
   visibleMenus,
 }: {
-  defaultHomePath: string;
   firstAccessibleMenuPath?: string;
   redirect?: string;
+  targetPath?: string;
   userHomePath?: string;
   visibleMenus: Array<{ children?: any[]; path?: string }>;
 }) {
-  if (redirect) {
+  if (!isUnsafeRedirectPath(redirect) && hasMenuPath(visibleMenus, redirect)) {
     return redirect;
   }
 
-  if (userHomePath && hasMenuPath(visibleMenus, userHomePath)) {
+  if (!isUnsafeRedirectPath(userHomePath) && hasMenuPath(visibleMenus, userHomePath)) {
     return userHomePath;
   }
 
-  return firstAccessibleMenuPath || defaultHomePath;
+  if (!isUnsafeRedirectPath(targetPath) && hasMenuPath(visibleMenus, targetPath)) {
+    return targetPath;
+  }
+
+  const safeDefaultHomePath = getSafeDefaultHomePath();
+  if (!isUnsafeRedirectPath(safeDefaultHomePath) && hasMenuPath(visibleMenus, safeDefaultHomePath)) {
+    return safeDefaultHomePath;
+  }
+
+  if (firstAccessibleMenuPath && !isUnsafeRedirectPath(firstAccessibleMenuPath)) {
+    return firstAccessibleMenuPath;
+  }
+
+  return safeDefaultHomePath;
 }
 
 /**
@@ -113,12 +136,28 @@ function setupAccessGuard(router: Router) {
     const accessStore = useAccessStore();
     const userStore = useUserStore();
     const authStore = useAuthStore();
+    const isFallbackNotFoundRoute = to.matched.some(
+      (route) => route.name === 'FallbackNotFound',
+    );
     // 基本路由，这些路由不需要进入权限拦截
     if (coreRouteNames.includes(to.name as string)) {
       if (to.path === LOGIN_PATH && accessStore.accessToken) {
-        return decodeURIComponent(
-          (to.query?.redirect as string) || preferences.app.defaultHomePath,
+        if (!accessStore.isAccessChecked) {
+          return true;
+        }
+
+        const firstAccessibleMenuPath = findFirstMenuPath(accessStore.accessMenus as Array<{ children?: any[]; path?: string }>);
+        const redirect = decodeURIComponent(
+          (to.query?.redirect as string) || getSafeDefaultHomePath(),
         );
+        const redirectPath = resolveAuthenticatedRedirectPath({
+          firstAccessibleMenuPath,
+          redirect,
+          targetPath: undefined,
+          userHomePath: userStore.userInfo?.homePath,
+          visibleMenus: accessStore.accessMenus as Array<{ children?: any[]; path?: string }>,
+        });
+        return isUnsafeRedirectPath(redirectPath) ? getSafeDefaultHomePath() : redirectPath;
       }
       return true;
     }
@@ -136,7 +175,7 @@ function setupAccessGuard(router: Router) {
           path: LOGIN_PATH,
           // 如不需要，直接删除 query
           query:
-            to.fullPath === preferences.app.defaultHomePath
+            to.fullPath === getSafeDefaultHomePath() || isUnsafeRedirectPath(to.fullPath)
               ? {}
               : { redirect: encodeURIComponent(to.fullPath) },
           // 携带当前跳转的页面，登录后重新跳转该页面
@@ -147,40 +186,70 @@ function setupAccessGuard(router: Router) {
     }
 
     // 是否已经生成过动态路由
-    if (accessStore.isAccessChecked) {
+    if (accessStore.isAccessChecked && !isFallbackNotFoundRoute) {
       return true;
     }
 
     // 生成路由表
     // 当前登录用户拥有的角色标识列表
-    const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
-    const userRoles = userInfo.roles ?? [];
+    try {
+      const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
+      const userRoles = userInfo.roles ?? [];
 
-    // 生成菜单和路由
-    const { accessibleMenus, accessibleRoutes } = await generateAccess({
-      roles: userRoles,
-      router,
-      // 则会在菜单中显示，但是访问会被重定向到403
-      routes: accessRoutes,
-    });
+      // 生成菜单和路由
+      const { accessibleMenus, accessibleRoutes } = await generateAccess({
+        roles: userRoles,
+        router,
+        // 则会在菜单中显示，但是访问会被重定向到403
+        routes: accessRoutes,
+      });
 
-    // 保存菜单信息和路由信息
-    accessStore.setAccessMenus(accessibleMenus);
-    accessStore.setAccessRoutes(accessibleRoutes);
-    accessStore.setIsAccessChecked(true);
+      // 保存菜单信息和路由信息
+      accessStore.setAccessMenus(accessibleMenus);
+      accessStore.setAccessRoutes(accessibleRoutes);
+      accessStore.setIsAccessChecked(true);
 
-    const firstAccessibleMenuPath = findFirstMenuPath(accessibleMenus);
-    const redirectPath = resolveAuthenticatedRedirectPath({
-      defaultHomePath: preferences.app.defaultHomePath,
-      firstAccessibleMenuPath,
-      redirect: from.query.redirect as string | undefined,
-      userHomePath: userInfo.homePath,
-      visibleMenus: accessibleMenus,
-    });
-    return {
-      ...router.resolve(decodeURIComponent(redirectPath)),
-      replace: true,
-    };
+      const firstAccessibleMenuPath = findFirstMenuPath(accessibleMenus);
+      const redirectPath = resolveAuthenticatedRedirectPath({
+        firstAccessibleMenuPath,
+        redirect: from.query.redirect as string | undefined,
+        targetPath: to.path,
+        userHomePath: userInfo.homePath,
+        visibleMenus: accessibleMenus,
+      });
+      const resolvedRedirect = router.resolve(
+        decodeURIComponent(redirectPath || getSafeDefaultHomePath()),
+      );
+      if (resolvedRedirect.fullPath === to.fullPath && !isFallbackNotFoundRoute) {
+        return true;
+      }
+
+      return {
+        ...resolvedRedirect,
+        replace: true,
+      };
+    } catch (error) {
+      console.error('[router] access guard init failed', error);
+      accessStore.setAccessToken(null);
+      accessStore.setRefreshToken(null);
+      accessStore.setAccessMenus([]);
+      accessStore.setAccessRoutes([]);
+      accessStore.setIsAccessChecked(false);
+      userStore.setUserInfo(null);
+
+      if (to.path !== LOGIN_PATH) {
+        message.error('登录状态已失效，请重新登录');
+        return {
+          path: LOGIN_PATH,
+          query: isUnsafeRedirectPath(to.fullPath)
+            ? {}
+            : { redirect: encodeURIComponent(to.fullPath) },
+          replace: true,
+        };
+      }
+
+      return true;
+    }
   });
 }
 

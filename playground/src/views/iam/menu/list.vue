@@ -36,14 +36,10 @@ const [Grid, gridApi] = useVbenVxeGrid({
         query: async () => {
           try {
             const items = await fetchMenuTree(true);
-            console.debug(
-              '[IAM Menu] fetched items',
-              items?.length ?? 0,
-              items,
-            );
             return items as any;
           } catch (error) {
             console.error('[IAM Menu] fetchMenus failed', error);
+            message.error('加载菜单列表失败，请稍后重试');
             return [] as any;
           }
         },
@@ -71,7 +67,6 @@ const [Grid, gridApi] = useVbenVxeGrid({
 
 onMounted(async () => {
   nextTick(() => {
-    console.debug('[IAM Menu] trigger initial query');
     gridApi.query();
   });
 });
@@ -126,7 +121,13 @@ function onDelete(row: IamMenu) {
       });
       onRefresh();
     })
-    .catch(() => hideLoading())
+    .catch((error) => {
+      console.error('[IAM Menu] delete failed', error);
+      message.error({
+        content: `删除失败：${row.name}`,
+        key: 'iam_menu_delete',
+      });
+    })
     .finally(() => hideLoading());
 }
 </script>

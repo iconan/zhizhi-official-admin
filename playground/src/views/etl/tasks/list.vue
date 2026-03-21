@@ -1,36 +1,143 @@
 <script lang="ts" setup>
+import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
+
 import { Page } from '@vben/common-ui';
-import { Button, Card, Col, Row, Statistic, message } from 'ant-design-vue';
-import { nextTick, onMounted, ref } from 'vue';
+import { Button, Card, Col, Modal, Row, Statistic, Tag, message } from 'ant-design-vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { fetchJobs, fetchMetricsSummary, replayDeadLetter } from '#/api/etl/jobs';
-import type { VxeTableGridOptions } from '#/adapter/vxe-table';
+import {
+  cancelJob,
+  fetchJobs,
+  fetchMetricsSummary,
+  replayDeadLetter,
+  replayEmbedding,
+  replayJob,
+  resumeJob,
+  type AlertLevel,
+  type JobItem,
+  type JobStatus,
+  type MetricsSummary,
+} from '#/api/etl/jobs';
 
-interface MetricsSummary {
-  total_jobs: number;
-  running_jobs: number;
-  failed_jobs: number;
-  waiting_jobs: number;
+const POLL_INTERVAL = 10_000;
+const metrics = ref<MetricsSummary | null>(null);
+let pollTimer: null | ReturnType<typeof setInterval> = null;
+const router = useRouter();
+
+const statusLabelMap: Record<string, string> = {
+  canceled: '已取消',
+  deferred: '延迟中',
+  failed: '失败',
+  finished: '已完成',
+  queued: '排队中',
+  started: '执行中',
+  stopped: '已停止',
+};
+
+const statusColorMap: Record<string, string> = {
+  canceled: 'default',
+  deferred: 'gold',
+  failed: 'error',
+  finished: 'success',
+  queued: 'processing',
+  started: 'blue',
+  stopped: 'warning',
+};
+
+const alertColorMap: Record<AlertLevel, string> = {
+  critical: 'error',
+  normal: 'default',
+  warning: 'warning',
+};
+
+function formatPercent(value?: number) {
+  if (value === null || value === undefined) return '--';
+  return `${(value * 100).toFixed(1)}%`;
 }
 
-const metrics = ref<MetricsSummary | null>(null);
+function canCancel(status?: JobStatus | string) {
+  return ['queued', 'deferred', 'started'].includes(status ?? '');
+}
+
+function canResume(status?: JobStatus | string) {
+  return ['queued', 'deferred', 'failed', 'canceled', 'stopped'].includes(status ?? '');
+}
+
+function canReplay(status?: JobStatus | string) {
+  return status === 'failed';
+}
+
+function canReplayEmbedding(row: JobItem) {
+  return !!(row.inserted_materials || row.embedded_materials || row.embedding_job_id);
+}
 
 const columns: VxeTableGridOptions['columns'] = [
-  { field: 'name', title: '任务名称', minWidth: 200 },
-  { field: 'status', title: '状态', minWidth: 120 },
-  { field: 'source_type', title: '来源', minWidth: 120 },
-  { field: 'last_run_at', title: '最近执行', minWidth: 180 },
-  { field: 'next_run_at', title: '下次执行', minWidth: 180 },
-  { field: 'created_at', title: '创建时间', minWidth: 180 },
+  { field: 'job_id', title: '任务 ID', minWidth: 280 },
+  { field: 'tenant_schema', title: '所属区域', minWidth: 160 },
+  {
+    field: 'job_type',
+    title: '任务类型',
+    minWidth: 120,
+    formatter: ({ cellValue }) => (cellValue === 'web_collect' ? '网页采集' : 'CSV 导入'),
+  },
+  { field: 'status', title: '状态', minWidth: 120, slots: { default: 'status' } },
+  { field: 'alert_level', title: '风险等级', minWidth: 120, slots: { default: 'alertLevel' } },
+  { field: 'quality_score_avg', title: '质量均分', minWidth: 120 },
+  { field: 'low_quality_ratio', title: '低质占比', minWidth: 120, slots: { default: 'lowQualityRatio' } },
+  {
+    field: 'embedding_dead_letter_ratio',
+    title: '死信占比',
+    minWidth: 120,
+    slots: { default: 'deadLetterRatio' },
+  },
+  { field: 's2_annotations_count', title: 'S2 批注数', minWidth: 120 },
+  { field: 's2_invalid_ratio', title: 'S2 无效率', minWidth: 120, slots: { default: 's2InvalidRatio' } },
+  {
+    field: 's2_deduplicated_ratio',
+    title: 'S2 去重率',
+    minWidth: 120,
+    slots: { default: 's2DeduplicatedRatio' },
+  },
+  { field: 'enqueued_at', title: '入队时间', minWidth: 180 },
+  { field: 'started_at', title: '开始时间', minWidth: 180 },
+  { field: 'ended_at', title: '结束时间', minWidth: 180 },
   {
     title: '操作',
     field: 'operation',
-    width: 180,
+    width: 420,
     fixed: 'right',
+    showOverflow: false,
     cellRender: {
+      attrs: {
+        onClick: onActionClick,
+      },
       name: 'CellOperation',
-      options: ['edit', 'delete'],
+      options: [
+        {
+          code: 'cancel',
+          text: '取消任务',
+          disabled: (row: JobItem) => !canCancel(row.status),
+          popconfirm: true,
+          confirmMessage: '确认取消当前任务？',
+        },
+        {
+          code: 'resume',
+          text: '恢复任务',
+          disabled: (row: JobItem) => !canResume(row.status),
+        },
+        {
+          code: 'replay',
+          text: '重跑任务',
+          disabled: (row: JobItem) => !canReplay(row.status),
+        },
+        {
+          code: 'replayEmbedding',
+          text: '重跑 Embedding',
+          disabled: (row: JobItem) => !canReplayEmbedding(row),
+        },
+      ],
     },
   },
 ];
@@ -50,15 +157,23 @@ const [Grid, gridApi] = useVbenVxeGrid({
             const limit = page?.pageSize || 20;
             const offset = ((page?.currentPage || 1) - 1) * limit;
             const { items, total } = await fetchJobs({
+              alert_level: formValues?.alert_level || undefined,
+              has_dead_letter:
+                formValues?.has_dead_letter === undefined || formValues?.has_dead_letter === null
+                  ? undefined
+                  : formValues.has_dead_letter,
+              job_type: formValues?.job_type || undefined,
               limit,
               offset,
+              quality_score_lt: formValues?.quality_score_lt || undefined,
               status: formValues?.status || undefined,
-              source: formValues?.source_type || undefined,
+              tenant_schema: formValues?.tenant_schema || undefined,
               keyword: formValues?.keyword || undefined,
             });
             return { items, total } as any;
           } catch (error) {
             console.error('[ETK] fetch jobs failed', error);
+            message.error('加载任务列表失败，请稍后重试');
             return { items: [], total: 0 } as any;
           }
         },
@@ -74,7 +189,13 @@ const [Grid, gridApi] = useVbenVxeGrid({
         component: 'Input',
         fieldName: 'keyword',
         label: '关键词',
-        componentProps: { allowClear: true, placeholder: '任务名称/ID' },
+        componentProps: { allowClear: true, placeholder: '任务 ID' },
+      },
+      {
+        component: 'Input',
+        fieldName: 'tenant_schema',
+        label: '所属区域',
+        componentProps: { allowClear: true, placeholder: 'tenant_schema' },
       },
       {
         component: 'Select',
@@ -83,23 +204,59 @@ const [Grid, gridApi] = useVbenVxeGrid({
         componentProps: {
           allowClear: true,
           options: [
-            { label: '运行中', value: 'running' },
-            { label: '等待', value: 'waiting' },
+            { label: '排队中', value: 'queued' },
+            { label: '执行中', value: 'started' },
+            { label: '延迟中', value: 'deferred' },
             { label: '失败', value: 'failed' },
-            { label: '成功', value: 'success' },
+            { label: '已完成', value: 'finished' },
+            { label: '已取消', value: 'canceled' },
+            { label: '已停止', value: 'stopped' },
           ],
           style: { width: '100%' },
         },
       },
       {
         component: 'Select',
-        fieldName: 'source_type',
-        label: '来源',
+        fieldName: 'job_type',
+        label: '任务类型',
         componentProps: {
           allowClear: true,
           options: [
-            { label: 'CSV 导入', value: 'csv' },
-            { label: '网页采集', value: 'web' },
+            { label: '网页采集', value: 'web_collect' },
+            { label: 'CSV 导入', value: 'csv_import' },
+          ],
+          style: { width: '100%' },
+        },
+      },
+      {
+        component: 'Select',
+        fieldName: 'has_dead_letter',
+        label: '存在死信',
+        componentProps: {
+          allowClear: true,
+          options: [
+            { label: '是', value: true },
+            { label: '否', value: false },
+          ],
+          style: { width: '100%' },
+        },
+      },
+      {
+        component: 'Input',
+        fieldName: 'quality_score_lt',
+        label: '质量阈值 <',
+        componentProps: { allowClear: true, placeholder: '例如 45' },
+      },
+      {
+        component: 'Select',
+        fieldName: 'alert_level',
+        label: '风险等级',
+        componentProps: {
+          allowClear: true,
+          options: [
+            { label: '正常', value: 'normal' },
+            { label: '告警', value: 'warning' },
+            { label: '严重', value: 'critical' },
           ],
           style: { width: '100%' },
         },
@@ -110,37 +267,114 @@ const [Grid, gridApi] = useVbenVxeGrid({
 
 async function loadMetrics() {
   try {
-    const res = await fetchMetricsSummary();
-    const data = (res as any)?.data ?? res;
-    const payload = data?.data ?? data ?? {};
-    metrics.value = {
-      total_jobs: payload?.total_jobs ?? 0,
-      running_jobs: payload?.running_jobs ?? 0,
-      failed_jobs: payload?.failed_jobs ?? 0,
-      waiting_jobs: payload?.waiting_jobs ?? 0,
-    } as MetricsSummary;
+    metrics.value = await fetchMetricsSummary();
   } catch (error) {
     console.error('[ETK] fetch metrics failed', error);
+    message.error('加载任务统计失败，请稍后重试');
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([loadMetrics(), gridApi.query()]);
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    if (document.hidden) return;
+    refreshAll();
+  }, POLL_INTERVAL);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function handleVisibilityChange() {
+  if (!document.hidden) {
+    refreshAll();
   }
 }
 
 async function triggerReplayDeadLetter() {
-  const hide = message.loading({ content: '正在重放死信...', duration: 0 });
+  Modal.confirm({
+    title: '确认批量重放死信？',
+    okType: 'danger',
+    onOk: async () => {
+      const hide = message.loading({ content: '正在重放死信...', duration: 0 });
+      try {
+        const res = await replayDeadLetter();
+        const data = (res as any)?.data ?? res;
+        const payload = data?.data ?? data ?? {};
+        message.success(`已触发重放：${payload?.replayed_jobs ?? 0} 个任务，涉及 ${payload?.total_dead_letter_materials ?? 0} 条素材`);
+        await refreshAll();
+      } catch (error) {
+        console.error('[ETK] replay dead letter failed', error);
+        message.error('重放失败');
+      } finally {
+        hide();
+      }
+    },
+  });
+}
+
+async function onActionClick({ code, row }: Parameters<OnActionClickFn<JobItem>>[0]) {
+  const actionMap = {
+    cancel: async () => {
+      await cancelJob(row.job_id);
+      message.success('取消成功');
+    },
+    replay: async () => {
+      await replayJob(row.job_id);
+      message.success('已触发重跑');
+    },
+    replayEmbedding: async () => {
+      await replayEmbedding(row.job_id);
+      message.success('已触发 Embedding 重跑');
+    },
+    resume: async () => {
+      await resumeJob(row.job_id);
+      message.success('恢复成功');
+    },
+  } as const;
+
+  const action = actionMap[code as keyof typeof actionMap];
+  if (!action) return;
+
+  const hide = message.loading({ content: '处理中...', duration: 0 });
   try {
-    await replayDeadLetter();
-    message.success('触发重放成功');
-    await gridApi.query();
-  } catch (error) {
-    console.error('[ETK] replay dead letter failed', error);
-    message.error('重放失败');
+    await action();
+    await refreshAll();
+  } catch (error: any) {
+    console.error('[ETK] job action failed', code, error);
+    const messageText = error?.response?.data?.message || error?.message || '';
+    if (messageText.includes('40901')) {
+      message.warning('当前状态不可操作，请刷新后重试');
+    } else if (messageText.includes('40401')) {
+      message.warning('任务不存在或已被清理');
+    } else if (messageText.includes('50010')) {
+      message.warning('下游依赖异常，请稍后重试');
+    } else {
+      message.error('操作失败，请稍后重试');
+    }
   } finally {
     hide();
   }
 }
 
 onMounted(async () => {
-  await Promise.all([loadMetrics(), nextTick()]);
-  gridApi.query();
+  await nextTick();
+  await refreshAll();
+  startPolling();
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
+
+onBeforeUnmount(() => {
+  stopPolling();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 
@@ -148,24 +382,52 @@ onMounted(async () => {
   <Page auto-content-height>
     <div class="mb-3">
       <Row :gutter="12">
-        <Col :span="6">
+        <Col :lg="4" :span="12">
           <Card size="small"><Statistic title="任务总数" :value="metrics?.total_jobs ?? 0" /></Card>
         </Col>
-        <Col :span="6">
-          <Card size="small"><Statistic title="运行中" :value="metrics?.running_jobs ?? 0" /></Card>
+        <Col :lg="4" :span="12">
+          <Card size="small"><Statistic title="告警任务" :value="metrics?.warning_jobs ?? 0" /></Card>
         </Col>
-        <Col :span="6">
-          <Card size="small"><Statistic title="等待" :value="metrics?.waiting_jobs ?? 0" /></Card>
+        <Col :lg="4" :span="12">
+          <Card size="small"><Statistic title="严重任务" :value="metrics?.critical_jobs ?? 0" /></Card>
         </Col>
-        <Col :span="6">
-          <Card size="small"><Statistic title="失败" :value="metrics?.failed_jobs ?? 0" /></Card>
+        <Col :lg="6" :span="12">
+          <Card size="small"><Statistic title="平均质量分" :precision="1" :value="metrics?.avg_quality_score ?? 0" /></Card>
+        </Col>
+        <Col :lg="6" :span="24">
+          <Card size="small">
+            <Statistic title="平均死信占比" :value="formatPercent(metrics?.avg_dead_letter_ratio)" />
+          </Card>
         </Col>
       </Row>
     </div>
     <Grid table-title="任务管理">
       <template #toolbar-tools>
-        <Button type="primary" danger ghost @click="triggerReplayDeadLetter">批量死信重放</Button>
-        <Button type="primary" class="ml-2" @click="$router.push('/etl/tasks/create')">创建任务</Button>
+        <Button danger ghost type="primary" @click="triggerReplayDeadLetter">批量死信重放</Button>
+        <Button class="ml-2" type="primary" @click="router.push('/etl/tasks/create')">创建任务</Button>
+      </template>
+      <template #status="{ row }">
+        <Tag :color="statusColorMap[row.status ?? ''] ?? 'default'">
+          {{ statusLabelMap[row.status ?? ''] ?? row.status ?? '--' }}
+        </Tag>
+      </template>
+      <template #alertLevel="{ row }">
+        <Tag v-if="row.alert_level" :color="alertColorMap[row.alert_level as AlertLevel]">
+          {{ row.alert_level }}
+        </Tag>
+        <span v-else>--</span>
+      </template>
+      <template #lowQualityRatio="{ row }">
+        {{ formatPercent(row.low_quality_ratio) }}
+      </template>
+      <template #deadLetterRatio="{ row }">
+        {{ formatPercent(row.embedding_dead_letter_ratio) }}
+      </template>
+      <template #s2InvalidRatio="{ row }">
+        {{ formatPercent(row.s2_invalid_ratio) }}
+      </template>
+      <template #s2DeduplicatedRatio="{ row }">
+        {{ formatPercent(row.s2_deduplicated_ratio) }}
       </template>
     </Grid>
   </Page>

@@ -160,6 +160,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
             return items;
           } catch (error) {
             console.error('[IAM Org] fetchOrgs failed', error);
+            message.error('加载组织列表失败，请稍后重试');
             return [];
           }
         },
@@ -228,7 +229,7 @@ async function loadSelectOptions() {
     const [admins] = await Promise.all([
       fetchAdminUsers({ limit: 200, offset: 0 }),
     ]);
-    ownerOptions.value = admins.map((item: IamAdminUser) => ({
+    ownerOptions.value = admins.items.map((item: IamAdminUser) => ({
       label: `${item.name || item.email} (${item.admin_user_id.slice(0, 8)})`,
       value: item.admin_user_id,
     }));
@@ -237,6 +238,7 @@ async function loadSelectOptions() {
     orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
     console.error('[IAM Org] load select options failed', error);
+    message.error('加载组织相关选项失败，请稍后重试');
   }
 }
 

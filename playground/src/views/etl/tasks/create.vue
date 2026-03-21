@@ -132,6 +132,9 @@ async function submitWeb() {
       extractor_strategy: 'hybrid',
       tenant_schema: undefined,
     };
+  } catch (error) {
+    console.error('[ETL Task] create job failed', error);
+    message.error('创建失败，请稍后重试');
   } finally {
     submitting.value = false;
     hide();
@@ -154,7 +157,8 @@ async function submitWeb() {
               创建网页采集任务
             </div>
             <div class="text-sm text-[var(--ant-color-text-description)]">
-              当前页面暂时仅保留网页采集方式，字段已按后端 ETL 管理接口对齐，创建后可在任务管理页继续查看执行状态。
+              当前页面暂时仅保留网页采集方式，字段已按后端 ETL
+              管理接口对齐，创建后可在任务管理页继续查看执行状态。
             </div>
           </div>
           <Space wrap>
@@ -172,7 +176,7 @@ async function submitWeb() {
             <Form layout="vertical">
               <Row :gutter="16">
                 <Col :span="24">
-                  <Form.Item label="选择所属区域" required>
+                  <Form.Item label="数据所属区域" required>
                     <Select
                       v-model:value="webForm.tenant_schema"
                       :loading="loadingTenants"
@@ -226,18 +230,14 @@ async function submitWeb() {
                 >
                   重置
                 </Button>
-                <Button
-                  :loading="submitting"
-                  type="primary"
-                  @click="submitWeb"
-                >
+                <Button :loading="submitting" type="primary" @click="submitWeb">
                   创建网页任务
                 </Button>
               </div>
             </Form>
           </Card>
         </Col>
- 
+
         <Col :lg="8" :span="24">
           <Card :bordered="false" class="rounded-2xl shadow-sm">
             <div class="mb-4 text-base font-medium">填写说明</div>
