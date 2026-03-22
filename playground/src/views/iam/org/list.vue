@@ -106,7 +106,7 @@ const onActionClick: OnActionClickFn<IamOrg> = ({ code, row }) => {
 
 function getColumns(onActionClickFn: OnActionClickFn<IamOrg>) {
   return [
-    { field: 'name', title: '名称', minWidth: 180, treeNode: true },
+    { align: 'left', field: 'name', title: '名称', minWidth: 180, treeNode: true },
     {
       field: 'parent_id',
       title: '上级组织',
@@ -169,6 +169,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
     } as any,
     rowConfig: { keyField: 'org_id' },
     treeConfig: {
+      indent: 16,
       rowField: 'org_id',
       parentField: 'parent_id',
       transform: true,

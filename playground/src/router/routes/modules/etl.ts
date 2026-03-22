@@ -21,16 +21,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/etl/tasks/list.vue'),
       },
       {
-        path: '/etl/tasks/create',
-        name: 'EtlTaskCreate',
-        meta: {
-          title: '创建任务',
-          icon: 'mdi:playlist-plus',
-          ignoreAccess: true,
-        },
-        component: () => import('#/views/etl/tasks/create.vue'),
-      },
-      {
         path: '/etl/rules',
         name: 'EtlRules',
         meta: {

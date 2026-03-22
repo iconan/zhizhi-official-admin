@@ -5,8 +5,7 @@ import type { ExtractorStrategy } from '#/api/etl/jobs';
 
 import { computed, onMounted, ref } from 'vue';
 
-import { Page } from '@vben/common-ui';
-
+import { useVbenDrawer } from '@vben/common-ui';
 import {
   Button,
   Card,
@@ -24,6 +23,8 @@ import { createJob } from '#/api/etl/jobs';
 import { fetchWebSources } from '#/api/etl/sources';
 import { fetchTenants } from '#/api/iam/tenant';
 
+const emit = defineEmits<{ success: [] }>();
+
 const loadingSources = ref(false);
 const loadingTenants = ref(false);
 const submitting = ref(false);
@@ -36,12 +37,30 @@ const extractorStrategyOptions: SelectProps['options'] = [
   { label: '仅规则解析（rules_only）', value: 'rules_only' },
 ];
 const defaultSourceName = 'xinhua';
-const webForm = ref({
+
+const initialWebForm = () => ({
   source_name: defaultSourceName,
   seed_urls_text: '',
   chunk_size: defaultChunkSize,
   extractor_strategy: 'hybrid' as ExtractorStrategy,
   tenant_schema: undefined as string | undefined,
+});
+
+const webForm = ref(initialWebForm());
+
+const [Drawer, drawerApi] = useVbenDrawer({
+  footer: false,
+  onCancel() {
+    drawerApi.close();
+  },
+  onConfirm: submitWeb,
+  onOpenChange(isOpen) {
+    if (isOpen) {
+      resetForm();
+      void loadSourceOptions();
+      void loadTenantOptions();
+    }
+  },
 });
 
 const activeTenantCount = computed(() => tenantOptions.value?.length ?? 0);
@@ -90,6 +109,10 @@ async function loadTenantOptions() {
   } finally {
     loadingTenants.value = false;
   }
+}
+
+function resetForm() {
+  webForm.value = initialWebForm();
 }
 
 function validateCommon(form: { tenant_schema?: string }) {
@@ -145,30 +168,28 @@ async function submitWeb() {
     tenant_schema: tenantSchema,
   };
   submitting.value = true;
+  drawerApi.lock();
   const hide = message.loading({ content: '创建中...', duration: 0 });
   try {
     await createJob(payload);
     message.success('创建成功');
-    webForm.value = {
-      source_name: defaultSourceName,
-      seed_urls_text: '',
-      chunk_size: defaultChunkSize,
-      extractor_strategy: 'hybrid',
-      tenant_schema: undefined,
-    };
+    resetForm();
+    drawerApi.close();
+    emit('success');
   } catch (error) {
     console.error('[ETL Task] create job failed', error);
     message.error('创建失败，请稍后重试');
   } finally {
     submitting.value = false;
+    drawerApi.unlock();
     hide();
   }
 }
 </script>
 
 <template>
-  <Page auto-content-height>
-    <div class="mx-auto w-full max-w-none px-4 md:px-6 xl:px-10">
+  <Drawer class="w-full max-w-[960px]" title="创建网页采集任务">
+    <div class="px-4 pb-4 pt-3">
       <Card
         :bordered="false"
         class="mb-4 overflow-hidden rounded-2xl shadow-sm"
@@ -243,17 +264,7 @@ async function submitWeb() {
                 />
               </Form.Item>
               <div class="flex justify-end gap-3">
-                <Button
-                  @click="
-                    webForm = {
-                      source_name: defaultSourceName,
-                      seed_urls_text: '',
-                      chunk_size: defaultChunkSize,
-                      extractor_strategy: 'hybrid',
-                      tenant_schema: undefined,
-                    }
-                  "
-                >
+                <Button @click="resetForm">
                   重置
                 </Button>
                 <Button :loading="submitting" type="primary" @click="submitWeb">
@@ -294,5 +305,5 @@ async function submitWeb() {
         </Col>
       </Row>
     </div>
-  </Page>
+  </Drawer>
 </template>

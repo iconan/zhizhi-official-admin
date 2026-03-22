@@ -123,21 +123,21 @@ const onActionClick: OnActionClickFn<IamTenant> = ({ code, row }) => {
 
 function getColumns(onActionClickFn: OnActionClickFn<IamTenant>) {
   return [
-    { field: 'tenant_code', title: '区域编码', minWidth: 160 },
-    { field: 'name', title: '租户名称', minWidth: 180 },
-    { field: 'schema_name', title: 'Schema', minWidth: 160 },
-    { field: 'schema_version', title: 'Schema 版本', minWidth: 140 },
+    { field: 'tenant_code', title: '区域编码', minWidth: 130 },
+    { field: 'name', title: '租户名称', minWidth: 150 },
+    { field: 'schema_name', title: 'Schema', minWidth: 130 },
+    { field: 'schema_version', title: 'Schema 版本', minWidth: 110 },
     {
       field: 'es_pool',
       title: 'ES 索引',
-      minWidth: 120,
+      width: 100,
       formatter: ({ cellValue }: { cellValue: null | number | undefined }) =>
         cellValue === 0 ? 0 : (cellValue ?? '-'),
     },
     {
       field: 'mark',
       title: '备注',
-      minWidth: 180,
+      minWidth: 140,
       showOverflow: true,
       formatter: ({ cellValue }: { cellValue: null | string | undefined }) =>
         cellValue || '-',
@@ -145,24 +145,24 @@ function getColumns(onActionClickFn: OnActionClickFn<IamTenant>) {
     {
       field: 'status',
       title: '状态',
-      width: 150,
+      width: 120,
       slots: { default: 'status' },
     },
     {
       field: 'created_at',
       title: '创建时间',
-      minWidth: 180,
+      minWidth: 160,
     },
     {
       field: 'updated_at',
       title: '更新时间',
-      minWidth: 180,
+      minWidth: 160,
     },
     {
       title: '操作',
       field: 'operation',
       fixed: 'right',
-      width: 240,
+      width: 200,
       showOverflow: false,
       cellRender: {
         name: 'CellOperation',

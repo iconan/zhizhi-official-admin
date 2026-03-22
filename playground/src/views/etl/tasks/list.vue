@@ -1,10 +1,9 @@
 <script lang="ts" setup>
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
-import { Page } from '@vben/common-ui';
+import { Page, useVbenDrawer } from '@vben/common-ui';
 import { Button, Card, Col, Modal, Row, Statistic, Tag, message } from 'ant-design-vue';
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
@@ -21,10 +20,15 @@ import {
   type MetricsSummary,
 } from '#/api/etl/jobs';
 
+import CreateDrawer from './modules/create-drawer.vue';
+
 const POLL_INTERVAL = 10_000;
 const metrics = ref<MetricsSummary | null>(null);
 let pollTimer: null | ReturnType<typeof setInterval> = null;
-const router = useRouter();
+const [CreateDrawerView, createDrawerApi] = useVbenDrawer({
+  connectedComponent: CreateDrawer,
+  destroyOnClose: true,
+});
 
 const statusLabelMap: Record<string, string> = {
   canceled: '已取消',
@@ -74,39 +78,39 @@ function canReplayEmbedding(row: JobItem) {
 }
 
 const columns: VxeTableGridOptions['columns'] = [
-  { field: 'job_id', title: '任务 ID', minWidth: 280 },
-  { field: 'tenant_schema', title: '所属区域', minWidth: 160 },
+  { field: 'job_id', title: '任务 ID', minWidth: 220 },
+  { field: 'tenant_schema', title: '所属区域', minWidth: 130 },
   {
     field: 'job_type',
     title: '任务类型',
-    minWidth: 120,
+    width: 100,
     formatter: ({ cellValue }) => (cellValue === 'web_collect' ? '网页采集' : 'CSV 导入'),
   },
-  { field: 'status', title: '状态', minWidth: 120, slots: { default: 'status' } },
-  { field: 'alert_level', title: '风险等级', minWidth: 120, slots: { default: 'alertLevel' } },
-  { field: 'quality_score_avg', title: '质量均分', minWidth: 120 },
-  { field: 'low_quality_ratio', title: '低质占比', minWidth: 120, slots: { default: 'lowQualityRatio' } },
+  { field: 'status', title: '状态', width: 100, slots: { default: 'status' } },
+  { field: 'alert_level', title: '风险等级', width: 100, slots: { default: 'alertLevel' } },
+  { field: 'quality_score_avg', title: '质量均分', width: 100 },
+  { field: 'low_quality_ratio', title: '低质占比', width: 100, slots: { default: 'lowQualityRatio' } },
   {
     field: 'embedding_dead_letter_ratio',
     title: '死信占比',
-    minWidth: 120,
+    width: 100,
     slots: { default: 'deadLetterRatio' },
   },
-  { field: 's2_annotations_count', title: 'S2 批注数', minWidth: 120 },
-  { field: 's2_invalid_ratio', title: 'S2 无效率', minWidth: 120, slots: { default: 's2InvalidRatio' } },
+  { field: 's2_annotations_count', title: 'S2 批注数', width: 100 },
+  { field: 's2_invalid_ratio', title: 'S2 无效率', width: 100, slots: { default: 's2InvalidRatio' } },
   {
     field: 's2_deduplicated_ratio',
     title: 'S2 去重率',
-    minWidth: 120,
+    width: 100,
     slots: { default: 's2DeduplicatedRatio' },
   },
-  { field: 'enqueued_at', title: '入队时间', minWidth: 180 },
-  { field: 'started_at', title: '开始时间', minWidth: 180 },
-  { field: 'ended_at', title: '结束时间', minWidth: 180 },
+  { field: 'enqueued_at', title: '入队时间', minWidth: 150 },
+  { field: 'started_at', title: '开始时间', minWidth: 150 },
+  { field: 'ended_at', title: '结束时间', minWidth: 150 },
   {
     title: '操作',
     field: 'operation',
-    width: 420,
+    width: 360,
     fixed: 'right',
     showOverflow: false,
     cellRender: {
@@ -293,6 +297,10 @@ function stopPolling() {
   }
 }
 
+function openCreateDrawer() {
+  createDrawerApi.setData({}).open();
+}
+
 function handleVisibilityChange() {
   if (!document.hidden) {
     refreshAll();
@@ -380,6 +388,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Page auto-content-height>
+    <CreateDrawerView @success="refreshAll" />
     <div class="mb-3">
       <Row :gutter="12">
         <Col :lg="4" :span="12">
@@ -404,7 +413,7 @@ onBeforeUnmount(() => {
     <Grid table-title="任务管理">
       <template #toolbar-tools>
         <Button danger ghost type="primary" @click="triggerReplayDeadLetter">批量死信重放</Button>
-        <Button class="ml-2" type="primary" @click="router.push('/etl/tasks/create')">创建任务</Button>
+        <Button class="ml-2" type="primary" @click="openCreateDrawer">创建任务</Button>
       </template>
       <template #status="{ row }">
         <Tag :color="statusColorMap[row.status ?? ''] ?? 'default'">

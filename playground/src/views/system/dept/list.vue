@@ -114,6 +114,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       zoom: true,
     },
     treeConfig: {
+      indent: 16,
       parentField: 'pid',
       rowField: 'id',
       transform: false,

@@ -48,6 +48,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       zoom: true,
     },
     treeConfig: {
+      indent: 16,
       parentField: 'pid',
       rowField: 'id',
       transform: false,
@@ -121,21 +122,20 @@ function onDelete(row: SystemMenuApi.SystemMenu) {
         </Button>
       </template>
       <template #title="{ row }">
-        <div class="flex w-full items-center gap-1">
-          <div class="size-5 flex-shrink-0">
+        <div class="flex items-center gap-1">
+          <div v-if="row.type === 'button' || row.meta?.icon" class="size-5 flex-shrink-0">
             <IconifyIcon
               v-if="row.type === 'button'"
               icon="carbon:security"
               class="size-full"
             />
             <IconifyIcon
-              v-else-if="row.meta?.icon"
+              v-else
               :icon="row.meta?.icon || 'carbon:circle-dash'"
               class="size-full"
             />
           </div>
-          <span class="flex-auto">{{ $t(row.meta?.title) }}</span>
-          <div class="items-center justify-end"></div>
+          <span>{{ $t(row.meta?.title) }}</span>
         </div>
         <MenuBadge
           v-if="row.meta?.badgeType"

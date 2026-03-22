@@ -130,25 +130,25 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
 const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions: {
     columns: [
-      { field: 'name', title: '调度名称', minWidth: 200 },
-      { field: 'tenant_schema', title: '所属区域', minWidth: 160 },
-      { field: 'source_name', title: '来源名称', minWidth: 140 },
-      { field: 'chunk_size', title: '分块大小', width: 120 },
-      { field: 'extractor_strategy', title: '提取策略', minWidth: 180 },
-      { field: 'interval_minutes', title: '间隔(分钟)', width: 120 },
+      { field: 'name', title: '调度名称', minWidth: 160 },
+      { field: 'tenant_schema', title: '所属区域', minWidth: 130 },
+      { field: 'source_name', title: '来源名称', minWidth: 120 },
+      { field: 'chunk_size', title: '分块大小', width: 100 },
+      { field: 'extractor_strategy', title: '提取策略', minWidth: 140 },
+      { field: 'interval_minutes', title: '间隔(分钟)', width: 100 },
       {
         field: 'enabled',
         title: '状态',
-        width: 120,
+        width: 100,
         slots: { default: 'enabled' },
       },
-      { field: 'last_run_at', title: '最近执行', minWidth: 180 },
-      { field: 'next_run_at', title: '下次执行', minWidth: 180 },
-      { field: 'created_at', title: '创建时间', minWidth: 180 },
+      { field: 'last_run_at', title: '最近执行', minWidth: 160 },
+      { field: 'next_run_at', title: '下次执行', minWidth: 160 },
+      { field: 'created_at', title: '创建时间', minWidth: 160 },
       {
         title: '操作',
         field: 'operation',
-        width: 300,
+        width: 260,
         fixed: 'right',
         showOverflow: false,
         cellRender: {

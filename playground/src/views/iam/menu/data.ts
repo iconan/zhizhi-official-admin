@@ -24,48 +24,49 @@ export function useColumns(
 ): VxeTableGridOptions<IamMenu>['columns'] {
   return [
     {
+      align: 'left',
       field: 'name',
       title: '名称',
       treeNode: true,
-      width: 220,
+      width: 180,
     },
     {
       field: 'menu_type',
       title: '类型',
       cellRender: { name: 'CellTag', options: getMenuTypeOptions() },
-      width: 120,
+      width: 100,
     },
     {
       field: 'code',
       title: '编码',
-      width: 160,
+      width: 140,
     },
     {
       field: 'permission_code',
       title: '权限码',
-      width: 200,
+      minWidth: 160,
     },
     {
       field: 'path',
       title: '路由地址',
-      minWidth: 200,
+      minWidth: 160,
     },
     {
       field: 'external_url',
       title: '外链',
       formatter: ({ row }) => row.external_url || (row as any)?.meta?.external_url || '',
-      minWidth: 220,
+      minWidth: 180,
     },
     {
       field: 'component',
       title: '页面组件',
-      minWidth: 160,
+      minWidth: 140,
     },
     {
       field: 'status',
       title: '状态',
       slots: { default: 'status' },
-      width: 110,
+      width: 100,
     },
     {
       align: 'right',
@@ -82,7 +83,7 @@ export function useColumns(
       fixed: 'right',
       showOverflow: false,
       title: '操作',
-      width: 200,
+      width: 180,
     },
   ];
 }

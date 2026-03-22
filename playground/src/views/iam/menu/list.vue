@@ -55,6 +55,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       zoom: true,
     },
     treeConfig: {
+      indent: 16,
       parentField: 'parent_id',
       rowField: 'menu_id',
       childrenField: 'children',

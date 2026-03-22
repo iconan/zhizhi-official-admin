@@ -32,25 +32,25 @@ export function useColumns(
       slots: { default: 'title' },
       title: $t('system.menu.menuTitle'),
       treeNode: true,
-      width: 250,
+      width: 210,
     },
     {
       align: 'center',
       cellRender: { name: 'CellTag', options: getMenuTypeOptions() },
       field: 'type',
       title: $t('system.menu.type'),
-      width: 100,
+      width: 90,
     },
     {
       field: 'authCode',
       title: $t('system.menu.authCode'),
-      width: 200,
+      minWidth: 150,
     },
     {
       align: 'left',
       field: 'path',
       title: $t('system.menu.path'),
-      width: 200,
+      minWidth: 160,
     },
 
     {
@@ -71,14 +71,14 @@ export function useColumns(
         }
         return '';
       },
-      minWidth: 200,
       title: $t('system.menu.component'),
+      minWidth: 160,
     },
     {
       cellRender: { name: 'CellTag' },
       field: 'status',
       title: $t('system.menu.status'),
-      width: 100,
+      width: 90,
     },
 
     {
@@ -103,7 +103,7 @@ export function useColumns(
       headerAlign: 'center',
       showOverflow: false,
       title: $t('system.menu.operation'),
-      width: 200,
+      width: 180,
     },
   ];
 }
