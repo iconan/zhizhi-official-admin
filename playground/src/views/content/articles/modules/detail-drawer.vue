@@ -163,8 +163,7 @@ async function handleRestore() {
 }
 
 const canPublish = (status?: ArticleStatus) => status === 'parsed';
-const canArchive = (status?: ArticleStatus) =>
-  status && ['crawled', 'parsed', 'published'].includes(status);
+const canArchive = (status?: ArticleStatus) => status === 'published';
 const canRestore = (status?: ArticleStatus) => status === 'archived';
 </script>
 

@@ -2,7 +2,7 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Select, Tag, Tooltip, message } from 'ant-design-vue';
+import { Modal, Select, Tag, Tooltip, message } from 'ant-design-vue';
 import type { SelectValue } from 'ant-design-vue/es/select';
 import { Copy } from 'lucide-vue-next';
 import dayjs from 'dayjs';
@@ -10,6 +10,10 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
+  batchArchiveArticles,
+  batchParseArticles,
+  batchPublishArticles,
+  batchRestoreArticles,
   fetchArticles,
   publishArticle,
   transitionArticleStatus,
@@ -46,6 +50,11 @@ async function copyToClipboard(text: string) {
 }
 
 const columns: VxeTableGridOptions['columns'] = [
+  {
+    type: 'checkbox',
+    width: 60,
+    fixed: 'left',
+  },
   {
     field: 'id',
     title: '文章 ID',
@@ -97,6 +106,13 @@ const columns: VxeTableGridOptions['columns'] = [
         { code: 'preview', text: '预览' },
         { code: 'detail', text: '详情' },
         {
+          code: 'parse',
+          text: '解析',
+          disabled: (row: ArticleListItem) => row.status !== 'crawled',
+          popconfirm: true,
+          confirmMessage: '确认解析该文章？将生成 AST 结构和批注。',
+        },
+        {
           code: 'publish',
           text: '发布',
           disabled: (row: ArticleListItem) => row.status !== 'parsed',
@@ -106,8 +122,9 @@ const columns: VxeTableGridOptions['columns'] = [
         {
           code: 'archive',
           text: '归档',
-          disabled: (row: ArticleListItem) => !['crawled', 'parsed', 'published'].includes(row.status),
+          disabled: (row: ArticleListItem) => row.status !== 'published',
           popconfirm: true,
+          confirmTitle: '确认归档',
           confirmMessage: '确认归档该文章？',
         },
         {
@@ -115,7 +132,8 @@ const columns: VxeTableGridOptions['columns'] = [
           text: '恢复',
           disabled: (row: ArticleListItem) => row.status !== 'archived',
           popconfirm: true,
-          confirmMessage: '确认将文章恢复为已抓取状态？',
+          confirmTitle: '确认恢复',
+          confirmMessage: '确认将文章恢复为已发布状态？',
         },
       ],
     },
@@ -128,10 +146,28 @@ const tenants = ref<IamTenant[]>([]);
 const tenantMap = ref<Record<string, IamTenant>>({});
 const selectedTenant = ref<string>();
 const loadingTenants = ref(false);
+const selectedRows = ref<ArticleListItem[]>([]);
 
 const currentTenantSchema = computed(() => {
   if (!selectedTenant.value) return null;
   return selectedTenant.value;
+});
+
+// 批量操作可用性计算
+const canBatchParse = computed(() => {
+  return selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'crawled');
+});
+
+const canBatchPublish = computed(() => {
+  return selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'parsed');
+});
+
+const canBatchArchive = computed(() => {
+  return selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'published');
+});
+
+const canBatchRestore = computed(() => {
+  return selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'archived');
 });
 
 const [DetailDrawer, detailDrawerApi] = useVbenDrawer({
@@ -231,6 +267,21 @@ const [Grid, gridApi] = useVbenVxeGrid({
     },
     rowConfig: { keyField: 'id' },
     toolbarConfig: { custom: true, export: false, refresh: true, zoom: true },
+    checkboxConfig: {
+      highlight: true,
+      range: true,
+    },
+  },
+  // vxe-grid 事件配置
+  gridEvents: {
+    checkboxChange: ({ records }: { records: ArticleListItem[] }) => {
+      selectedRows.value = records || [];
+      console.log('[Content] checkboxChange:', records);
+    },
+    checkboxAll: ({ records }: { records: ArticleListItem[] }) => {
+      selectedRows.value = records || [];
+      console.log('[Content] checkboxAll:', records);
+    },
   },
   formOptions: {
     submitOnChange: true,
@@ -279,6 +330,17 @@ const [Grid, gridApi] = useVbenVxeGrid({
       },
     ],
   },
+});
+
+// 模板 ref 用于访问 Grid 组件
+const gridRef = ref<InstanceType<typeof Grid>>();
+
+// 在组件挂载后初始化数据
+onMounted(async () => {
+  await nextTick();
+  await Promise.all([loadSources(), loadTenants()]);
+  // 租户加载完成后自动查询数据
+  await gridApi.query();
 });
 
 async function loadSources() {
@@ -337,6 +399,14 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
     detail: () => {
       detailDrawerApi.setData({ articleId: row.id, tenantSchema }).open();
     },
+    parse: async () => {
+      await transitionArticleStatus(row.id, {
+        tenant_schema: tenantSchema,
+        target_status: 'parsed',
+        reason: '手动解析',
+      });
+      message.success('文章解析成功');
+    },
     publish: async () => {
       await publishArticle(row.id, tenantSchema);
       message.success('文章发布成功');
@@ -352,10 +422,10 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
     restore: async () => {
       await transitionArticleStatus(row.id, {
         tenant_schema: tenantSchema,
-        target_status: 'crawled',
+        target_status: 'published',
         reason: '恢复文章',
       });
-      message.success('文章已恢复为已抓取状态');
+      message.success('文章已恢复为已发布状态');
     },
   } as const;
 
@@ -388,33 +458,231 @@ function handleTenantChange(value: SelectValue) {
   gridApi.query();
 }
 
-onMounted(async () => {
-  await nextTick();
-  await Promise.all([loadSources(), loadTenants()]);
-  // 租户加载完成后自动查询数据
-  await gridApi.query();
-});
+// 批量解析（仅 crawled -> parsed）
+async function handleBatchParse() {
+  if (!canBatchParse.value) return;
+  
+  // 从选中的行中获取租户 schema（假设所有选中的行都属于同一租户）
+  const tenantSchema = selectedRows.value[0]?.tenant_schema;
+  if (!tenantSchema) {
+    message.warning('无法确定文章所属区域');
+    return;
+  }
+
+  Modal.confirm({
+    title: '确认批量解析',
+    content: `已选择 ${selectedRows.value.length} 篇已抓取文章，确认批量解析？将生成 AST 结构和批注。`,
+    onOk: async () => {
+      try {
+        const result = await batchParseArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.value.map((row) => row.id),
+          reason: '批量解析',
+        });
+        
+        if (result.failed_count > 0) {
+          message.warning(`批量解析完成：成功 ${result.success_count} 篇，失败 ${result.failed_count} 篇`);
+          console.error('[Content] batch parse failures:', result.failures);
+        } else {
+          message.success(`成功解析 ${result.success_count} 篇文章`);
+        }
+        
+        selectedRows.value = [];
+        await gridApi.query();
+      } catch (error: any) {
+        console.error('[Content] batch parse failed', error);
+        message.error('批量解析失败，请稍后重试');
+      }
+    },
+  });
+}
+
+// 批量发布
+async function handleBatchPublish() {
+  if (!canBatchPublish.value) return;
+  
+  // 从选中的行中获取租户 schema（假设所有选中的行都属于同一租户）
+  const tenantSchema = selectedRows.value[0]?.tenant_schema;
+  if (!tenantSchema) {
+    message.warning('无法确定文章所属区域');
+    return;
+  }
+
+  Modal.confirm({
+    title: '确认批量发布',
+    content: `已选择 ${selectedRows.value.length} 篇文章，确认批量发布？`,
+    onOk: async () => {
+      try {
+        const result = await batchPublishArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.value.map((row) => row.id),
+          reason: '批量发布',
+        });
+        
+        if (result.failed_count > 0) {
+          message.warning(`批量发布完成：成功 ${result.success_count} 篇，失败 ${result.failed_count} 篇`);
+          console.error('[Content] batch publish failures:', result.failures);
+        } else {
+          message.success(`成功发布 ${result.success_count} 篇文章`);
+        }
+        
+        selectedRows.value = [];
+        await gridApi.query();
+      } catch (error: any) {
+        console.error('[Content] batch publish failed', error);
+        message.error('批量发布失败，请稍后重试');
+      }
+    },
+  });
+}
+
+// 批量归档
+async function handleBatchArchive() {
+  if (!canBatchArchive.value) return;
+  
+  // 从选中的行中获取租户 schema（假设所有选中的行都属于同一租户）
+  const tenantSchema = selectedRows.value[0]?.tenant_schema;
+  if (!tenantSchema) {
+    message.warning('无法确定文章所属区域');
+    return;
+  }
+
+  Modal.confirm({
+    title: '确认批量归档',
+    content: `已选择 ${selectedRows.value.length} 篇已发布文章，确认批量归档？`,
+    okType: 'danger',
+    onOk: async () => {
+      try {
+        const result = await batchArchiveArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.value.map((row) => row.id),
+          reason: '批量归档',
+        });
+        
+        if (result.failed_count > 0) {
+          message.warning(`批量归档完成：成功 ${result.success_count} 篇，失败 ${result.failed_count} 篇`);
+          console.error('[Content] batch archive failures:', result.failures);
+        } else {
+          message.success(`成功归档 ${result.success_count} 篇文章`);
+        }
+        
+        selectedRows.value = [];
+        await gridApi.query();
+      } catch (error: any) {
+        console.error('[Content] batch archive failed', error);
+        message.error('批量归档失败，请稍后重试');
+      }
+    },
+  });
+}
+
+// 批量恢复
+async function handleBatchRestore() {
+  if (!canBatchRestore.value) return;
+  
+  // 从选中的行中获取租户 schema（假设所有选中的行都属于同一租户）
+  const tenantSchema = selectedRows.value[0]?.tenant_schema;
+  if (!tenantSchema) {
+    message.warning('无法确定文章所属区域');
+    return;
+  }
+
+  Modal.confirm({
+    title: '确认批量恢复',
+    content: `已选择 ${selectedRows.value.length} 篇已归档文章，确认批量恢复为已发布状态？`,
+    onOk: async () => {
+      try {
+        const result = await batchRestoreArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.value.map((row) => row.id),
+          reason: '批量恢复',
+        });
+        
+        if (result.failed_count > 0) {
+          message.warning(`批量恢复完成：成功 ${result.success_count} 篇，失败 ${result.failed_count} 篇`);
+          console.error('[Content] batch restore failures:', result.failures);
+        } else {
+          message.success(`成功恢复 ${result.success_count} 篇文章`);
+        }
+        
+        selectedRows.value = [];
+        await gridApi.query();
+      } catch (error: any) {
+        console.error('[Content] batch restore failed', error);
+        message.error('批量恢复失败，请稍后重试');
+      }
+    },
+  });
+}
 </script>
 
 <template>
   <Page auto-content-height>
     <DetailDrawer @success="gridApi.query" />
     <PreviewDrawer />
-    <Grid table-title="文章管理">
+    <Grid ref="gridRef" table-title="文章管理">
       <template #toolbar-tools>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-500">所属区域:</span>
-          <Select
-            v-model:value="selectedTenant"
-            :loading="loadingTenants"
-            :options="tenantOptions"
-            allow-clear
-            placeholder="选择所属区域"
-            show-search
-            option-filter-prop="label"
-            style="width: 280px"
-            @change="handleTenantChange"
-          />
+        <div class="flex items-center gap-4">
+          <!-- 区域选择 -->
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-500">所属区域:</span>
+            <Select
+              v-model:value="selectedTenant"
+              :loading="loadingTenants"
+              :options="tenantOptions"
+              allow-clear
+              placeholder="选择所属区域"
+              show-search
+              option-filter-prop="label"
+              style="width: 280px"
+              @change="handleTenantChange"
+            />
+          </div>
+          
+          <!-- 分隔线 -->
+          <div class="h-6 w-px bg-gray-300"></div>
+          
+          <!-- 批量操作按钮 -->
+          <div class="flex items-center gap-2">
+            <span v-if="selectedRows.length > 0" class="text-sm text-gray-500">
+              已选择 {{ selectedRows.length }} 项
+            </span>
+            <span v-else class="text-sm text-gray-400">
+              批量操作
+            </span>
+            <a-button
+              type="primary"
+              size="small"
+              :disabled="!canBatchParse"
+              @click="handleBatchParse"
+            >
+              批量解析
+            </a-button>
+            <a-button
+              type="primary"
+              size="small"
+              :disabled="!canBatchPublish"
+              @click="handleBatchPublish"
+            >
+              批量发布
+            </a-button>
+            <a-button
+              danger
+              size="small"
+              :disabled="!canBatchArchive"
+              @click="handleBatchArchive"
+            >
+              批量归档
+            </a-button>
+            <a-button
+              type="default"
+              size="small"
+              :disabled="!canBatchRestore"
+              @click="handleBatchRestore"
+            >
+              批量恢复
+            </a-button>
+          </div>
         </div>
       </template>
       <template #article-id="{ row }">

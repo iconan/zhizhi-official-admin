@@ -124,6 +124,19 @@ export interface PublishResult {
   accepted: boolean;
 }
 
+export interface BatchStatusInput {
+  tenant_schema: string;
+  article_ids: string[];
+  reason?: string;
+}
+
+export interface BatchStatusResult {
+  total: number;
+  success_count: number;
+  failed_count: number;
+  failures: { article_id: string; error: string }[];
+}
+
 export async function fetchArticles(params: ArticleQuery): Promise<ArticleListResponse> {
   const res = await requestClient.get(`${ETL_PREFIX}/articles`, { params });
   const data = (res as any)?.data ?? res;
@@ -162,4 +175,32 @@ export async function publishArticle(articleId: string, tenantSchema: string): P
   const data = (res as any)?.data ?? res;
   const payload = data?.data ?? data ?? {};
   return payload as PublishResult;
+}
+
+export async function batchPublishArticles(input: BatchStatusInput): Promise<BatchStatusResult> {
+  const res = await requestClient.post(`${ETL_PREFIX}/articles/batch/publish`, input);
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  return payload as BatchStatusResult;
+}
+
+export async function batchArchiveArticles(input: BatchStatusInput): Promise<BatchStatusResult> {
+  const res = await requestClient.post(`${ETL_PREFIX}/articles/batch/archive`, input);
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  return payload as BatchStatusResult;
+}
+
+export async function batchRestoreArticles(input: BatchStatusInput): Promise<BatchStatusResult> {
+  const res = await requestClient.post(`${ETL_PREFIX}/articles/batch/restore`, input);
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  return payload as BatchStatusResult;
+}
+
+export async function batchParseArticles(input: BatchStatusInput): Promise<BatchStatusResult> {
+  const res = await requestClient.post(`${ETL_PREFIX}/articles/batch/parse`, input);
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  return payload as BatchStatusResult;
 }
