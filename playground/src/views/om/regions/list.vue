@@ -308,14 +308,19 @@ function onCreate() {
   openDrawer();
 }
 
-function openDrawer(row?: Region) {
+async function openDrawer(row?: Region) {
   currentRegionId.value = row?.id ?? null;
   formDrawerApi.open();
   nextTick(async () => {
     await regionFormApi.resetForm();
     if (row) {
       const nextStatus: RegionActiveStatus = row.is_active === -1 ? -1 : 1;
-      await regionFormApi.setValues({ ...row, is_active: nextStatus });
+      // 确保 code 是字符串类型，避免数字 0 被误判为空
+      await regionFormApi.setValues({
+        ...row,
+        code: row.code !== undefined && row.code !== null ? String(row.code) : undefined,
+        is_active: nextStatus,
+      });
     } else {
       await regionFormApi.setValues({
         code: undefined,

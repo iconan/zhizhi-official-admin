@@ -2,6 +2,9 @@ import type { VxeTableGridOptions, OnActionClickFn } from '#/adapter/vxe-table';
 
 import type { MenuStatus, IamMenu } from '#/api/iam/menu';
 
+import { h } from 'vue';
+import { IconifyIcon } from '@vben/icons';
+
 export function getMenuTypeOptions() {
   return [
     { label: '目录', value: 'directory', color: 'blue' },
@@ -28,7 +31,17 @@ export function useColumns(
       field: 'name',
       title: '名称',
       treeNode: true,
-      width: 180,
+      width: 200,
+      slots: {
+        default: ({ row }) => {
+          return h('div', { class: 'flex items-center gap-2' }, [
+            row.icon
+              ? h(IconifyIcon, { icon: row.icon, class: 'size-4 flex-shrink-0' })
+              : null,
+            h('span', row.name),
+          ]);
+        },
+      },
     },
     {
       field: 'menu_type',

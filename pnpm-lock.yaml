@@ -1621,6 +1621,9 @@ importers:
       json-bigint:
         specifier: 'catalog:'
         version: 1.0.0
+      lucide-vue-next:
+        specifier: 'catalog:'
+        version: 0.553.0(vue@3.5.27(typescript@5.9.3))
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.9.3)(vue@3.5.27(typescript@5.9.3))

@@ -78,7 +78,7 @@ const schema: VbenFormSchema[] = [
     rules: z.string().url('请输入合法的URL').optional(),
   },
   {
-    component: 'AutoComplete',
+    component: 'Select',
     fieldName: 'component',
     label: '页面组件',
     dependencies: {
@@ -87,15 +87,22 @@ const schema: VbenFormSchema[] = [
     },
     componentProps: {
       allowClear: true,
-      class: 'w-full',
-      options: componentKeys.map((v) => ({ value: v })),
+      showSearch: true,
+      optionFilterProp: 'value',
+      options: componentKeys.map((v) => ({ value: v, label: v })),
+      style: { width: '100%' },
+      placeholder: '请选择或输入组件',
     },
   },
   {
-    component: 'Input',
+    component: 'IconPicker',
     fieldName: 'icon',
     label: '图标',
-    componentProps: { allowClear: true },
+    componentProps: {
+      prefix: 'ant-design',
+      allowClear: true,
+      autocomplete: 'off',
+    },
   },
   {
     component: 'Select',
