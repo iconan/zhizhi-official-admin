@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { useVbenDrawer } from '@vben/common-ui';
-import { Card, Empty, Spin, Tag, message } from 'ant-design-vue';
+import { Card, Empty, Spin, Tag } from 'ant-design-vue';
 import { ref } from 'vue';
 
 import {
@@ -64,8 +64,8 @@ async function loadArticleDetail(articleId: string, tenantSchema: string) {
   try {
     article.value = await fetchArticleDetail(articleId, tenantSchema);
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[Content] fetch article detail failed', error);
-    message.error('加载文章预览失败，请稍后重试');
   } finally {
     loading.value = false;
   }

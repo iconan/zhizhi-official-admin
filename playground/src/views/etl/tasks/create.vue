@@ -63,8 +63,8 @@ async function loadSourceOptions() {
       webForm.value.source_name = (sourceOptions.value?.[0]?.value as string) || defaultSourceName;
     }
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETL Task] load web sources failed', error);
-    message.error('加载来源枚举失败，请稍后重试');
   } finally {
     loadingSources.value = false;
   }
@@ -85,8 +85,8 @@ async function loadTenantOptions() {
         value: item.schema_name,
       }));
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETL Task] load active tenants failed', error);
-    message.error('加载区域列表失败，请稍后重试');
   } finally {
     loadingTenants.value = false;
   }
@@ -157,8 +157,8 @@ async function submitWeb() {
       tenant_schema: undefined,
     };
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETL Task] create job failed', error);
-    message.error('创建失败，请稍后重试');
   } finally {
     submitting.value = false;
     hide();

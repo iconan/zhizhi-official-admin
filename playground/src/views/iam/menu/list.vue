@@ -38,8 +38,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
             const items = await fetchMenuTree(true);
             return items as any;
           } catch (error) {
+            // 错误提示由全局拦截器统一处理
             console.error('[IAM Menu] fetchMenus failed', error);
-            message.error('加载菜单列表失败，请稍后重试');
             return [] as any;
           }
         },
@@ -123,11 +123,8 @@ function onDelete(row: IamMenu) {
       onRefresh();
     })
     .catch((error) => {
+      // 错误提示由全局拦截器统一处理
       console.error('[IAM Menu] delete failed', error);
-      message.error({
-        content: `删除失败：${row.name}`,
-        key: 'iam_menu_delete',
-      });
     })
     .finally(() => hideLoading());
 }

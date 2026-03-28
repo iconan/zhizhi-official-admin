@@ -159,8 +159,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
             const items = await fetchOrgs();
             return items;
           } catch (error) {
+            // 错误提示由全局拦截器统一处理
             console.error('[IAM Org] fetchOrgs failed', error);
-            message.error('加载组织列表失败，请稍后重试');
             return [];
           }
         },
@@ -238,8 +238,8 @@ async function loadSelectOptions() {
     orgOptionsAll.value = await getAllOrgOptions();
     orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[IAM Org] load select options failed', error);
-    message.error('加载组织相关选项失败，请稍后重试');
   }
 }
 
@@ -272,8 +272,8 @@ function toggleStatus(row: IamOrg) {
         gridApi.query();
       })
       .catch((error) => {
+        // 错误提示由全局拦截器统一处理
         console.error('[IAM Org] update status failed', error);
-        message.error('更新失败');
       })
       .finally(() => hide());
   };

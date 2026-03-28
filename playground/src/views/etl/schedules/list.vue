@@ -276,8 +276,8 @@ async function toggleEnabled(row: ScheduleItem) {
     message.success('状态已更新');
     await gridApi.query();
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETK] toggle schedule enabled failed', error);
-    message.error('状态更新失败，请稍后重试');
   } finally {
     hide();
   }
@@ -290,8 +290,8 @@ async function runNow(row: ScheduleItem) {
     message.success('已触发');
     await gridApi.query();
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETK] run schedule now failed', error);
-    message.error('触发失败，请稍后重试');
   } finally {
     hide();
   }
@@ -306,8 +306,8 @@ async function triggerDue() {
     message.success(`已触发 ${payload?.triggered ?? 0} 个到期调度`);
     await gridApi.query();
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETK] trigger due schedules failed', error);
-    message.error('触发到期任务失败，请稍后重试');
   } finally {
     hide();
   }

@@ -1,15 +1,14 @@
 <script lang="ts" setup>
 import { useVbenDrawer } from '@vben/common-ui';
 import { Card, Descriptions, Empty, Spin, Tag, Tabs, Timeline, message } from 'ant-design-vue';
-import { onMounted, ref, watch } from 'vue';
+import { ref } from 'vue';
 
 import {
   fetchArticleDetail,
   publishArticle,
+  reparseArticle,
   transitionArticleStatus,
-  type ArticleAnnotation,
   type ArticleDetail,
-  type ArticleParagraph,
   type ArticleStatus,
 } from '#/api/etl/articles';
 import { fetchWebSources, type EtlWebSourceItem } from '#/api/etl/sources';
@@ -18,8 +17,15 @@ const emit = defineEmits<{ success: [] }>();
 
 const loading = ref(false);
 const article = ref<ArticleDetail | null>(null);
+const tenantSchema = ref<string>('');
 const activeTab = ref('content');
 const sourceMap = ref<Record<string, string>>({});
+
+// 操作按钮loading状态，防止重复点击
+const publishing = ref(false);
+const archiving = ref(false);
+const restoring = ref(false);
+const reparsing = ref(false);
 
 async function loadSources() {
   try {
@@ -44,10 +50,12 @@ const [Drawer, drawerApi] = useVbenDrawer({
       void loadSources();
       const data = drawerApi.getData();
       if (data?.articleId && data?.tenantSchema) {
+        tenantSchema.value = data.tenantSchema;
         void loadArticleDetail(data.articleId, data.tenantSchema);
       }
     } else {
       article.value = null;
+      tenantSchema.value = '';
       activeTab.value = 'content';
     }
   },
@@ -64,7 +72,7 @@ const statusColorMap: Record<ArticleStatus, string> = {
   crawled: 'default',
   parsed: 'blue',
   published: 'success',
-  archived: 'warning',
+  archived: 'red',
 };
 
 async function loadArticleDetail(articleId: string, tenantSchema: string) {
@@ -79,92 +87,90 @@ async function loadArticleDetail(articleId: string, tenantSchema: string) {
   }
 }
 
-function getNodeClass(type: string): string {
-  switch (type) {
-    case 'highlight':
-      return 'bg-amber-100 text-amber-800 px-1 rounded';
-    case 'fallback_card':
-      return 'bg-red-50 text-red-600 px-2 py-1 rounded border border-red-200 inline-block';
-    default:
-      return '';
-  }
-}
-
-function renderParagraphNodes(nodes: ArticleParagraph['nodes']): string {
-  return nodes
-    .map((node) => {
-      if (node.type === 'text') return node.content || '';
-      if (node.type === 'highlight') return node.exact_text || '';
-      if (node.type === 'fallback_card') return `[Fallback: ${node.exact_text || ''}]`;
-      return '';
-    })
-    .join('');
-}
-
 async function handlePublish() {
-  if (!article.value) return;
+  if (!article.value || !tenantSchema.value || publishing.value) return;
+  publishing.value = true;
   const hide = message.loading({ content: '发布中...', duration: 0 });
   try {
-    await publishArticle(article.value.id, article.value.id);
+    await publishArticle(article.value.id, tenantSchema.value);
     message.success('文章发布成功');
     emit('success');
-    await loadArticleDetail(article.value.id, article.value.id);
+    await loadArticleDetail(article.value.id, tenantSchema.value);
   } catch (error: any) {
+    // 错误提示由全局拦截器统一处理
     console.error('[Content] publish failed', error);
-    const messageText = error?.response?.data?.message || error?.message || '';
-    if (messageText.includes('40901')) {
-      message.warning('当前状态不可发布，请刷新后重试');
-    } else {
-      message.error('发布失败，请稍后重试');
-    }
   } finally {
     hide();
+    publishing.value = false;
   }
 }
 
 async function handleArchive() {
-  if (!article.value) return;
+  if (!article.value || !tenantSchema.value || archiving.value) return;
+  archiving.value = true;
   const hide = message.loading({ content: '归档中...', duration: 0 });
   try {
     await transitionArticleStatus(article.value.id, {
-      tenant_schema: article.value.id,
+      tenant_schema: tenantSchema.value,
       target_status: 'archived',
       reason: '运营归档',
     });
     message.success('文章已归档');
     emit('success');
-    await loadArticleDetail(article.value.id, article.value.id);
+    await loadArticleDetail(article.value.id, tenantSchema.value);
   } catch (error: any) {
+    // 错误提示由全局拦截器统一处理
     console.error('[Content] archive failed', error);
-    message.error('归档失败，请稍后重试');
   } finally {
     hide();
+    archiving.value = false;
   }
 }
 
 async function handleRestore() {
-  if (!article.value) return;
+  if (!article.value || !tenantSchema.value || restoring.value) return;
+  restoring.value = true;
   const hide = message.loading({ content: '恢复中...', duration: 0 });
   try {
     await transitionArticleStatus(article.value.id, {
-      tenant_schema: article.value.id,
-      target_status: 'crawled',
+      tenant_schema: tenantSchema.value,
+      target_status: 'published',
       reason: '恢复文章',
     });
-    message.success('文章已恢复');
+    message.success('文章已恢复为已发布状态');
     emit('success');
-    await loadArticleDetail(article.value.id, article.value.id);
+    await loadArticleDetail(article.value.id, tenantSchema.value);
   } catch (error: any) {
+    // 错误提示由全局拦截器统一处理
     console.error('[Content] restore failed', error);
-    message.error('恢复失败，请稍后重试');
   } finally {
     hide();
+    restoring.value = false;
+  }
+}
+
+async function handleReparse() {
+  if (!article.value || !tenantSchema.value || reparsing.value) return;
+  reparsing.value = true;
+  const hide = message.loading({ content: '重新解析中...', duration: 0 });
+  try {
+    const result = await reparseArticle(article.value.id, tenantSchema.value);
+    message.success(`重新解析完成：生成 ${result.annotations_count} 个批注`);
+    emit('success');
+    await loadArticleDetail(article.value.id, tenantSchema.value);
+  } catch (error: any) {
+    // 错误提示由全局拦截器统一处理
+    console.error('[Content] reparse failed', error);
+  } finally {
+    hide();
+    reparsing.value = false;
   }
 }
 
 const canPublish = (status?: ArticleStatus) => status === 'parsed';
 const canArchive = (status?: ArticleStatus) => status === 'published';
 const canRestore = (status?: ArticleStatus) => status === 'archived';
+const canReparse = (status?: ArticleStatus) => status === 'parsed' || status === 'published';
 </script>
 
 <template>
@@ -202,25 +208,36 @@ const canRestore = (status?: ArticleStatus) => status === 'archived';
           </div>
           <div class="ml-4 flex gap-2">
             <button
+              v-if="canReparse(article.status)"
+              :disabled="reparsing"
+              class="rounded bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+              @click="handleReparse"
+            >
+              {{ reparsing ? '解析中...' : '重新解析' }}
+            </button>
+            <button
               v-if="canPublish(article.status)"
-              class="rounded bg-green-500 px-3 py-1.5 text-sm text-white hover:bg-green-600"
+              :disabled="publishing"
+              class="rounded bg-green-500 px-3 py-1.5 text-sm text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
               @click="handlePublish"
             >
-              发布
+              {{ publishing ? '发布中...' : '发布' }}
             </button>
             <button
               v-if="canArchive(article.status)"
-              class="rounded bg-orange-500 px-3 py-1.5 text-sm text-white hover:bg-orange-600"
+              :disabled="archiving"
+              class="rounded bg-orange-500 px-3 py-1.5 text-sm text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
               @click="handleArchive"
             >
-              归档
+              {{ archiving ? '归档中...' : '归档' }}
             </button>
             <button
               v-if="canRestore(article.status)"
-              class="rounded bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600"
+              :disabled="restoring"
+              class="rounded bg-blue-500 px-3 py-1.5 text-sm text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               @click="handleRestore"
             >
-              恢复
+              {{ restoring ? '恢复中...' : '恢复' }}
             </button>
           </div>
         </div>

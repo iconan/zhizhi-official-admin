@@ -300,8 +300,8 @@ async function loadOrgOptions() {
     orgOptionsAll.value = await getAllOrgOptions();
     orgTreeOptions.value = await getActiveOrgTreeOptions();
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[IAM Role] fetchOrgs failed', error);
-    message.error('加载组织选项失败，请稍后重试');
   }
 }
 
@@ -373,8 +373,8 @@ function toggleStatus(row: IamRole) {
       gridApi.query();
     })
     .catch((error) => {
+      // 错误提示由全局拦截器统一处理
       console.error('[IAM Role] update status failed', error);
-      message.error('更新失败，请稍后重试');
     })
     .finally(() => hide());
 }

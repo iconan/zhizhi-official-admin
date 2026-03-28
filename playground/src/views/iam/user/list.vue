@@ -471,8 +471,8 @@ function toggleStatus(row: IamAdminUser) {
       void gridApi.query();
     })
     .catch((error) => {
+      // 错误提示由全局拦截器统一处理
       console.error('[IAM AdminUser] update status failed', error);
-      message.error('更新失败，请稍后重试');
     })
     .finally(() => hide());
 }

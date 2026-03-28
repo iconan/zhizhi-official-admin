@@ -412,12 +412,7 @@ async function doUpdateStatus(
     message.success(target === 'disabled' ? '已禁用' : '已启用');
     gridApi.query();
   } catch (error: any) {
-    const status = error?.response?.status;
-    if (status === 409) {
-      message.error('状态不可切换，请刷新后重试');
-    } else {
-      message.error('操作失败');
-    }
+    // 错误提示由全局拦截器统一处理
     console.error('[IAM Tenant] update status failed', error);
   } finally {
     hide();

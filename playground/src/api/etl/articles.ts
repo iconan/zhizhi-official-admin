@@ -74,6 +74,7 @@ export interface ArticleDetail {
   original_url?: string;
   issue_info?: string;
   status: ArticleStatus;
+  word_count?: number;
   content_raw?: string;
   content_clean?: string;
   paragraphs?: ArticleParagraph[];
@@ -203,4 +204,30 @@ export async function batchParseArticles(input: BatchStatusInput): Promise<Batch
   const data = (res as any)?.data ?? res;
   const payload = data?.data ?? data ?? {};
   return payload as BatchStatusResult;
+}
+
+export interface ReparseResult {
+  article_id: string;
+  previous_status: ArticleStatus;
+  current_status: ArticleStatus;
+  annotations_count: number;
+  fallback_count: number;
+  stitched_count: number;
+  fallback_card_count: number;
+  success: boolean;
+  message?: string;
+}
+
+export async function reparseArticle(
+  articleId: string,
+  tenantSchema: string,
+  reason?: string,
+): Promise<ReparseResult> {
+  const res = await requestClient.post(`${ETL_PREFIX}/articles/${articleId}/reparse`, {
+    tenant_schema: tenantSchema,
+    reason: reason || '手动重新解析',
+  });
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  return payload as ReparseResult;
 }

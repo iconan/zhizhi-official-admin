@@ -273,8 +273,8 @@ async function loadMetrics() {
   try {
     metrics.value = await fetchMetricsSummary();
   } catch (error) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETK] fetch metrics failed', error);
-    message.error('加载任务统计失败，请稍后重试');
   }
 }
 
@@ -320,8 +320,8 @@ async function triggerReplayDeadLetter() {
         message.success(`已触发重放：${payload?.replayed_jobs ?? 0} 个任务，涉及 ${payload?.total_dead_letter_materials ?? 0} 条素材`);
         await refreshAll();
       } catch (error) {
+        // 错误提示由全局拦截器统一处理
         console.error('[ETK] replay dead letter failed', error);
-        message.error('重放失败');
       } finally {
         hide();
       }
@@ -357,17 +357,8 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<JobItem>>
     await action();
     await refreshAll();
   } catch (error: any) {
+    // 错误提示由全局拦截器统一处理
     console.error('[ETK] job action failed', code, error);
-    const messageText = error?.response?.data?.message || error?.message || '';
-    if (messageText.includes('40901')) {
-      message.warning('当前状态不可操作，请刷新后重试');
-    } else if (messageText.includes('40401')) {
-      message.warning('任务不存在或已被清理');
-    } else if (messageText.includes('50010')) {
-      message.warning('下游依赖异常，请稍后重试');
-    } else {
-      message.error('操作失败，请稍后重试');
-    }
   } finally {
     hide();
   }

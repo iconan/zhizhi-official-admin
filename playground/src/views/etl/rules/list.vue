@@ -200,8 +200,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
             const { items, total } = await fetchRules({ limit, offset });
             return { items, total } as any;
           } catch (error) {
+            // 错误提示由全局拦截器统一处理
             console.error('[ETK] fetch rules failed', error);
-            message.error('加载规则列表失败，请稍后重试');
             return { items: [], total: 0 } as any;
           }
         },
