@@ -1,7 +1,9 @@
 <script lang="tsx" setup>
+import type { SelectProps } from 'ant-design-vue';
+
 import { Page } from '@vben/common-ui';
 import { Button, Modal, Tag, message } from 'ant-design-vue';
-import { nextTick, onMounted } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -16,14 +18,19 @@ import {
   type ScheduleInput,
   type ScheduleItem,
 } from '#/api/etl/schedules';
+import { fetchWebSources, type EtlWebSourceItem } from '#/api/etl/sources';
 import type { ExtractorStrategy } from '#/api/etl/jobs';
 
 const defaultChunkSize = 320;
+const defaultSourceName = 'xinhua';
 const extractorStrategyOptions = [
   { label: '混合策略（hybrid）', value: 'hybrid' },
   { label: '托管优先（managed_first）', value: 'managed_first' },
   { label: '仅规则解析（rules_only）', value: 'rules_only' },
 ];
+
+const sourceOptions = ref<SelectProps['options']>([]);
+const loadingSources = ref(false);
 
 function parseSeedUrls(value?: string) {
   return (value || '')
@@ -36,6 +43,10 @@ function toSeedUrlsText(value?: string[]) {
   return value?.join('\n') || '';
 }
 
+function resolveDefaultSourceName() {
+  return (sourceOptions.value?.[0]?.value as string) || defaultSourceName;
+}
+
 function normalizeSchedulePayload(values: Record<string, any>): ScheduleInput {
   return {
     chunk_size: Number(values.chunk_size || defaultChunkSize),
@@ -44,9 +55,30 @@ function normalizeSchedulePayload(values: Record<string, any>): ScheduleInput {
     interval_minutes: Number(values.interval_minutes || 60),
     name: values.name,
     seed_urls: parseSeedUrls(values.seed_urls_text),
-    source_name: values.source_name,
+    source_name: values.source_name || resolveDefaultSourceName(),
     tenant_schema: values.tenant_schema,
   };
+}
+
+async function loadSourceOptions() {
+  loadingSources.value = true;
+  try {
+    const { items } = await fetchWebSources();
+    sourceOptions.value = items.map((item: EtlWebSourceItem) => ({
+      label: item.display_name,
+      value: item.key,
+    }));
+  } catch (error) {
+    console.error('[ETK] load web sources failed', error);
+  } finally {
+    loadingSources.value = false;
+  }
+}
+
+async function ensureSourceOptionsLoaded() {
+  if (!sourceOptions.value.length && !loadingSources.value) {
+    await loadSourceOptions();
+  }
 }
 
 const [ScheduleForm, scheduleFormApi] = useVbenForm({
@@ -65,10 +97,16 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       rules: z.string({ required_error: '请输入所属区域' }).min(1, '请输入所属区域'),
     },
     {
-      component: 'Input',
+      component: 'Select',
       fieldName: 'source_name',
       label: '来源名称',
-      rules: z.string({ required_error: '请输入来源名称' }).min(1, '请输入来源名称').max(200, '过长'),
+      componentProps: {
+        allowClear: false,
+        loading: loadingSources,
+        options: sourceOptions,
+        placeholder: '请选择来源名称',
+      },
+      rules: z.string({ required_error: '请选择来源名称' }).min(1, '请选择来源名称'),
     },
     {
       component: 'Textarea',
@@ -191,14 +229,15 @@ const [Grid, gridApi] = useVbenVxeGrid({
   } as VxeTableGridOptions,
 });
 
-function onCreate() {
+async function onCreate() {
+  await ensureSourceOptionsLoaded();
   scheduleFormApi.resetForm();
   scheduleFormApi.setValues({
     chunk_size: defaultChunkSize,
     enabled: true,
     extractor_strategy: 'hybrid',
     interval_minutes: 60,
-    source_name: 'web-schedule',
+    source_name: resolveDefaultSourceName(),
   });
   Modal.confirm({
     title: '新增调度',
@@ -217,9 +256,10 @@ function onCreate() {
   });
 }
 
-function onActionClick({ code, row }: Parameters<OnActionClickFn<ScheduleItem>>[0]) {
+async function onActionClick({ code, row }: Parameters<OnActionClickFn<ScheduleItem>>[0]) {
   switch (code) {
     case 'edit':
+      await ensureSourceOptionsLoaded();
       scheduleFormApi.resetForm();
       scheduleFormApi.setValues({
         chunk_size: row.chunk_size ?? defaultChunkSize,
@@ -228,7 +268,7 @@ function onActionClick({ code, row }: Parameters<OnActionClickFn<ScheduleItem>>[
         interval_minutes: row.interval_minutes ?? 60,
         name: row.name,
         seed_urls_text: toSeedUrlsText(row.seed_urls),
-        source_name: row.source_name ?? 'web-schedule',
+        source_name: row.source_name ?? resolveDefaultSourceName(),
         tenant_schema: row.tenant_schema,
       });
       Modal.confirm({
@@ -314,6 +354,7 @@ async function triggerDue() {
 }
 
 onMounted(() => {
+  void loadSourceOptions();
   nextTick(() => gridApi.query());
 });
 </script>

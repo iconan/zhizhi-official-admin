@@ -309,7 +309,7 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
               <Timeline.Item color="blue">
                 <div class="font-medium">S1 结构化切分</div>
                 <div class="text-sm text-gray-500">
-                  段落数: {{ article.pipeline_meta.s1?.paragraphs || 0 }}
+                  段落数: {{ article.pipeline_meta.s1?.paragraph_count || 0 }}
                   | 字数: {{ article.word_count || 0 }}
                 </div>
               </Timeline.Item>
@@ -330,8 +330,8 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
               <Timeline.Item color="orange">
                 <div class="font-medium">S3 AST 缝合</div>
                 <div class="text-sm text-gray-500">
-                  缝合成功: {{ article.pipeline_meta.s3?.stitched || 0 }}
-                  | Fallback Cards: {{ article.pipeline_meta.s3?.fallback_cards || 0 }}
+                  缝合成功: {{ article.pipeline_meta.s3?.stitched_count || 0 }}
+                  | Fallback Cards: {{ article.pipeline_meta.s3?.fallback_card_count || 0 }}
                 </div>
               </Timeline.Item>
             </Timeline>
@@ -359,7 +359,7 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
                   <span class="font-medium">S1 结构化切分</span>
                 </div>
                 <Descriptions :column="2" size="small" layout="horizontal">
-                  <Descriptions.Item label="段落数">{{ article.pipeline_meta.s1.paragraphs || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="段落数">{{ article.pipeline_meta.s1.paragraph_count || 0 }}</Descriptions.Item>
                   <Descriptions.Item label="字数">{{ article.word_count || 0 }}</Descriptions.Item>
                 </Descriptions>
               </div>
@@ -388,8 +388,8 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
                   <span class="font-medium">S3 AST 缝合</span>
                 </div>
                 <Descriptions :column="2" size="small" layout="horizontal">
-                  <Descriptions.Item label="缝合成功">{{ article.pipeline_meta.s3.stitched || 0 }}</Descriptions.Item>
-                  <Descriptions.Item label="Fallback Cards">{{ article.pipeline_meta.s3.fallback_cards || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="缝合成功">{{ article.pipeline_meta.s3.stitched_count || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Fallback Cards">{{ article.pipeline_meta.s3.fallback_card_count || 0 }}</Descriptions.Item>
                 </Descriptions>
               </div>
 

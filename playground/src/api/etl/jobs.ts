@@ -2,7 +2,6 @@ import { requestClient } from '#/api/request';
 
 const ETL_PREFIX = '/v1/admin/etl';
 
-export type JobCreateEndpoint = 'collect/web' | 'import';
 export type JobStatus =
   | 'canceled'
   | 'deferred'
@@ -11,7 +10,7 @@ export type JobStatus =
   | 'queued'
   | 'started'
   | 'stopped';
-export type JobType = 'csv_import' | 'web_collect';
+export type JobType = 'web_collect';
 export type AlertLevel = 'critical' | 'normal' | 'warning';
 export type ExtractorStrategy = 'hybrid' | 'managed_first' | 'rules_only';
 
@@ -136,7 +135,6 @@ export interface JobQuery {
 
 export interface JobInput {
   chunk_size?: number;
-  csv_path?: string;
   extractor_strategy?: ExtractorStrategy;
   seed_urls?: string[];
   source_name?: string;
@@ -193,9 +191,6 @@ export async function replayDeadLetter() {
   return requestClient.post(`${ETL_PREFIX}/jobs/replay-dead-letter`);
 }
 
-export async function createJob(
-  payload: JobInput,
-  endpoint: JobCreateEndpoint = 'collect/web',
-) {
-  return requestClient.post(`${ETL_PREFIX}/${endpoint}`, payload);
+export async function createJob(payload: JobInput) {
+  return requestClient.post(`${ETL_PREFIX}/collect/web`, payload);
 }

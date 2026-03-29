@@ -157,11 +157,6 @@ const debouncedSetSelectedRows = useDebounceFn((records: ArticleListItem[]) => {
   selectedRows.value = records || [];
 }, 15);
 
-const currentTenantSchema = computed(() => {
-  if (!selectedTenant.value) return null;
-  return selectedTenant.value;
-});
-
 // 批量操作可用性计算（操作时禁用按钮防止重复提交）
 const canBatchParse = computed(() => {
   return !batchProcessing.value && selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'crawled');
@@ -259,11 +254,6 @@ const [Grid, gridApi] = useVbenVxeGrid({
                       ...queryParams,
                       limit: perTenantLimit,
                     }).catch(() => ({ items: [], total: 0, has_more: false }));
-                    // 为每个文章添加 tenant_schema
-                    result.items = result.items.map((item) => ({
-                      ...item,
-                      tenant_schema: tenant.schema_name,
-                    }));
                     return result;
                   }),
               );
@@ -288,12 +278,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
                 tenant_schema: selectedTenant.value,
                 ...queryParams,
               });
-              // 为每个文章添加 tenant_schema
-              const itemsWithSchema = items.map((item) => ({
-                ...item,
-                tenant_schema: selectedTenant.value,
-              }));
-              return { items: itemsWithSchema, total, has_more } as any;
+              return { items, total, has_more } as any;
             }
           } catch (error) {
             message.error('加载文章列表失败，请稍后重试');
@@ -423,7 +408,7 @@ async function loadTenants() {
 }
 
 async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleListItem>>[0]) {
-  const tenantSchema = row.tenant_schema || currentTenantSchema.value || '';
+  const tenantSchema = row.tenant_schema;
   if (!tenantSchema) {
     message.warning('无法确定文章所属区域');
     return;
@@ -490,7 +475,7 @@ function handleTenantChange(value: SelectValue) {
 function groupByTenant(rows: ArticleListItem[]): Map<string, ArticleListItem[]> {
   const groups = new Map<string, ArticleListItem[]>();
   for (const row of rows) {
-    const schema = row.tenant_schema || 'unknown';
+    const schema = row.tenant_schema;
     if (!groups.has(schema)) {
       groups.set(schema, []);
     }
@@ -505,10 +490,6 @@ async function handleBatchParse() {
 
   // 按租户分组
   const groups = groupByTenant(selectedRows.value);
-  if (groups.has('unknown')) {
-    message.warning('部分文章缺少区域信息，无法批量解析');
-    return;
-  }
 
   Modal.confirm({
     title: '确认批量解析',
@@ -593,10 +574,6 @@ async function handleBatchPublish() {
 
   // 按租户分组
   const groups = groupByTenant(selectedRows.value);
-  if (groups.has('unknown')) {
-    message.warning('部分文章缺少区域信息，无法批量发布');
-    return;
-  }
 
   Modal.confirm({
     title: '确认批量发布',
@@ -681,10 +658,6 @@ async function handleBatchArchive() {
 
   // 按租户分组
   const groups = groupByTenant(selectedRows.value);
-  if (groups.has('unknown')) {
-    message.warning('部分文章缺少区域信息，无法批量归档');
-    return;
-  }
 
   Modal.confirm({
     title: '确认批量归档',
@@ -770,10 +743,6 @@ async function handleBatchRestore() {
 
   // 按租户分组
   const groups = groupByTenant(selectedRows.value);
-  if (groups.has('unknown')) {
-    message.warning('部分文章缺少区域信息，无法批量恢复');
-    return;
-  }
 
   Modal.confirm({
     title: '确认批量恢复',

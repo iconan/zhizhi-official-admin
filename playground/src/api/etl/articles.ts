@@ -8,6 +8,7 @@ export interface ArticleListItem {
   id: string;
   title: string;
   source_name: string;
+  tenant_schema: string;
   author?: string;
   publish_date?: string;
   status: ArticleStatus;
@@ -18,7 +19,6 @@ export interface ArticleListItem {
   annotations_count?: number;
   fallback_count?: number;
   word_count?: number;
-  tenant_schema?: string;
 }
 
 export interface ArticleParagraphNode {
@@ -43,32 +43,52 @@ export interface ArticleAnnotation {
   is_fallback: boolean;
 }
 
+export interface ArticlePipelineMetaS1 {
+  paragraph_count?: number;
+  paragraph_ids?: string[];
+}
+
+export interface ArticlePipelineMetaS2 {
+  annotations_count?: number;
+  fallback_count?: number;
+  batches?: number;
+  provider_items?: number;
+  normalized_items?: number;
+  invalid_items?: number;
+  deduplicated_items?: number;
+  annotation_provider?: string;
+  annotation_model?: string;
+  batch_size?: number;
+  status?: string;
+  error?: string;
+}
+
+export interface ArticlePipelineMetaS3 {
+  stitched_count?: number;
+  fallback_card_count?: number;
+}
+
+export interface ArticlePipelineReparseHistoryItem {
+  at?: string;
+  reason?: string;
+  previous_status?: string;
+}
+
 export interface ArticlePipelineMeta {
-  s1?: {
-    paragraphs?: number;
-    word_count?: number;
-  };
-  s2?: {
-    annotations_count?: number;
-    fallback_count?: number;
-    batches?: number;
-    provider_items?: number;
-    normalized_items?: number;
-    invalid_items?: number;
-    deduplicated_items?: number;
-    invalid_ratio?: number;
-    deduplicated_ratio?: number;
-  };
-  s3?: {
-    stitched?: number;
-    fallback_cards?: number;
-  };
+  pipeline_version?: string;
+  last_stage?: string;
+  s1?: ArticlePipelineMetaS1 | null;
+  s2?: ArticlePipelineMetaS2 | null;
+  s3?: ArticlePipelineMetaS3 | null;
+  reparse_count?: number;
+  reparse_history?: ArticlePipelineReparseHistoryItem[];
 }
 
 export interface ArticleDetail {
   id: string;
   title: string;
   source_name: string;
+  tenant_schema: string;
   author?: string;
   publish_date?: string;
   original_url?: string;
@@ -79,7 +99,7 @@ export interface ArticleDetail {
   content_clean?: string;
   paragraphs?: ArticleParagraph[];
   annotations?: ArticleAnnotation[];
-  pipeline_meta?: ArticlePipelineMeta;
+  pipeline_meta?: ArticlePipelineMeta | null;
   created_at: string;
   updated_at: string;
 }

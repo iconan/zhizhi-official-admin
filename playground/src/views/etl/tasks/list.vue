@@ -84,7 +84,7 @@ const columns: VxeTableGridOptions['columns'] = [
     field: 'job_type',
     title: '任务类型',
     width: 100,
-    formatter: ({ cellValue }) => (cellValue === 'web_collect' ? '网页采集' : 'CSV 导入'),
+    formatter: ({ cellValue }) => (cellValue === 'web_collect' ? '网页采集' : cellValue || '--'),
   },
   { field: 'status', title: '状态', width: 100, slots: { default: 'status' } },
   { field: 'alert_level', title: '风险等级', width: 100, slots: { default: 'alertLevel' } },
@@ -227,7 +227,6 @@ const [Grid, gridApi] = useVbenVxeGrid({
           allowClear: true,
           options: [
             { label: '网页采集', value: 'web_collect' },
-            { label: 'CSV 导入', value: 'csv_import' },
           ],
           style: { width: '100%' },
         },
