@@ -223,10 +223,14 @@ export async function reparseArticle(
   tenantSchema: string,
   reason?: string,
 ): Promise<ReparseResult> {
-  const res = await requestClient.post(`${ETL_PREFIX}/articles/${articleId}/reparse`, {
-    tenant_schema: tenantSchema,
-    reason: reason || '手动重新解析',
-  });
+  const res = await requestClient.post(
+    `${ETL_PREFIX}/articles/${articleId}/reparse`,
+    {
+      tenant_schema: tenantSchema,
+      reason: reason || '手动重新解析',
+    },
+    { timeout: 120000 }, // 2分钟超时，重新解析可能耗时较长
+  );
   const data = (res as any)?.data ?? res;
   const payload = data?.data ?? data ?? {};
   return payload as ReparseResult;

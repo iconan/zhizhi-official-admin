@@ -296,7 +296,7 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
                 </div>
                 <div class="mb-1 text-sm text-gray-500">原文: {{ anno.exact_text }}</div>
                 <div class="mb-1 text-blue-600">白话: {{ anno.replace_white_talk }}</div>
-                <div class="text-gray-700">解读: {{ anno.deep_explain }}</div>
+                <div class="text-gray-700">解读: {{ anno.deep_explain || '无' }}</div>
               </div>
             </div>
             <Empty v-else description="暂无批注数据" />
@@ -310,7 +310,7 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
                 <div class="font-medium">S1 结构化切分</div>
                 <div class="text-sm text-gray-500">
                   段落数: {{ article.pipeline_meta.s1?.paragraphs || 0 }}
-                  | 字数: {{ article.pipeline_meta.s1?.word_count || 0 }}
+                  | 字数: {{ article.word_count || 0 }}
                 </div>
               </Timeline.Item>
               <Timeline.Item color="green">
@@ -336,6 +336,70 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
               </Timeline.Item>
             </Timeline>
             <Empty v-else description="暂无处理链路数据" />
+          </Card>
+        </Tabs.TabPane>
+
+        <Tabs.TabPane key="pipeline-meta" tab="处理详情">
+          <Card :bordered="false" class="rounded-xl shadow-sm">
+            <div v-if="article.pipeline_meta" class="space-y-4">
+              <div class="rounded-lg bg-gray-50 p-4">
+                <div class="mb-2 text-sm font-medium text-gray-600">Pipeline Stages</div>
+                <div class="flex gap-2">
+                  <Tag v-if="article.pipeline_meta.s1" color="blue">S1</Tag>
+                  <Tag v-if="article.pipeline_meta.s2" color="green">S2</Tag>
+                  <Tag v-if="article.pipeline_meta.s3" color="orange">S3</Tag>
+                  <Tag v-if="!article.pipeline_meta.s1 && !article.pipeline_meta.s2 && !article.pipeline_meta.s3">无数据</Tag>
+                </div>
+              </div>
+
+              <!-- S1 信息 -->
+              <div v-if="article.pipeline_meta.s1" class="rounded-lg border border-gray-200 p-4">
+                <div class="mb-3 flex items-center gap-2">
+                  <div class="h-2 w-2 rounded-full bg-blue-500"></div>
+                  <span class="font-medium">S1 结构化切分</span>
+                </div>
+                <Descriptions :column="2" size="small" layout="horizontal">
+                  <Descriptions.Item label="段落数">{{ article.pipeline_meta.s1.paragraphs || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="字数">{{ article.word_count || 0 }}</Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <!-- S2 信息 -->
+              <div v-if="article.pipeline_meta.s2" class="rounded-lg border border-gray-200 p-4">
+                <div class="mb-3 flex items-center gap-2">
+                  <div class="h-2 w-2 rounded-full bg-green-500"></div>
+                  <span class="font-medium">S2 批注生成</span>
+                </div>
+                <Descriptions :column="2" size="small" layout="horizontal">
+                  <Descriptions.Item label="批注数">{{ article.pipeline_meta.s2.annotations_count || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Fallback数">{{ article.pipeline_meta.s2.fallback_count || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="批次">{{ article.pipeline_meta.s2.batches || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Provider Items">{{ article.pipeline_meta.s2.provider_items || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Normalized">{{ article.pipeline_meta.s2.normalized_items || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Invalid">{{ article.pipeline_meta.s2.invalid_items || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Deduplicated">{{ article.pipeline_meta.s2.deduplicated_items || 0 }}</Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <!-- S3 信息 -->
+              <div v-if="article.pipeline_meta.s3" class="rounded-lg border border-gray-200 p-4">
+                <div class="mb-3 flex items-center gap-2">
+                  <div class="h-2 w-2 rounded-full bg-orange-500"></div>
+                  <span class="font-medium">S3 AST 缝合</span>
+                </div>
+                <Descriptions :column="2" size="small" layout="horizontal">
+                  <Descriptions.Item label="缝合成功">{{ article.pipeline_meta.s3.stitched || 0 }}</Descriptions.Item>
+                  <Descriptions.Item label="Fallback Cards">{{ article.pipeline_meta.s3.fallback_cards || 0 }}</Descriptions.Item>
+                </Descriptions>
+              </div>
+
+              <!-- 原始 JSON -->
+              <div class="rounded-lg border border-gray-200 p-4">
+                <div class="mb-2 text-sm font-medium text-gray-600">完整 Pipeline Meta (JSON)</div>
+                <pre class="max-h-80 overflow-auto rounded bg-gray-50 p-3 text-xs">{{ JSON.stringify(article.pipeline_meta, null, 2) }}</pre>
+              </div>
+            </div>
+            <Empty v-else description="暂无 Pipeline Meta 数据" />
           </Card>
         </Tabs.TabPane>
 
