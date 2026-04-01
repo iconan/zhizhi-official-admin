@@ -14,7 +14,7 @@ import {
   Notification,
   UserDropdown,
 } from '@vben/layouts';
-import { preferences, updatePreferences } from '@vben/preferences';
+import { clearCache, preferences, updatePreferences } from '@vben/preferences';
 import { useAccessStore, useTabbarStore, useUserStore } from '@vben/stores';
 import { openWindow } from '@vben/utils';
 
@@ -132,6 +132,11 @@ const menus = computed(() => [
     icon: CircleHelp,
     text: $t('ui.widgets.qa'),
   },
+  {
+    handler: handleClearCacheAndLogout,
+    icon: 'lucide:trash-2',
+    text: $t('preferences.clearAndLogout'),
+  },
 ]);
 
 const avatar = computed(() => {
@@ -139,6 +144,11 @@ const avatar = computed(() => {
 });
 
 async function handleLogout() {
+  await authStore.logout(false);
+}
+
+async function handleClearCacheAndLogout() {
+  clearCache();
   await authStore.logout(false);
 }
 

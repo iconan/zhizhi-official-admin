@@ -12,6 +12,7 @@ export const overridesPreferences = defineOverridesPreferences({
     watermark: false,
     watermarkContent: 'yuwenku.com',
     enablePreferences: false,
+    enableRefreshToken: true,
   },
   widget: {
     languageToggle: false,

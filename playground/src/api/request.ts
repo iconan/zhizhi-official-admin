@@ -64,6 +64,7 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
    * 刷新token逻辑
    */
   async function doRefreshToken() {
+    console.log('[Token] 开始刷新 token...');
     const accessStore = useAccessStore();
     const resp = await refreshTokenApi(accessStore.refreshToken ?? undefined);
     const newToken =
@@ -78,6 +79,7 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       null;
     accessStore.setAccessToken(newToken);
     accessStore.setRefreshToken(newRefreshToken);
+    console.log('[Token] 刷新成功，新 token:', newToken?.slice(0, 20) + '...');
     return newToken;
   }
 
