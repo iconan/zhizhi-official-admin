@@ -145,6 +145,22 @@ export interface PublishResult {
   accepted: boolean;
 }
 
+export interface ArticleDeleteInput {
+  tenant_schema: string;
+  reason?: string;
+}
+
+export interface ArticleDeleteResult {
+  article_id: string;
+  tenant_schema: string;
+  previous_status: string;
+  deleted: boolean;
+  deleted_materials_count: number;
+  deleted_annotations_count: number;
+  success: boolean;
+  message?: string;
+}
+
 export interface BatchStatusInput {
   tenant_schema: string;
   article_ids: string[];
@@ -196,6 +212,19 @@ export async function publishArticle(articleId: string, tenantSchema: string): P
   const data = (res as any)?.data ?? res;
   const payload = data?.data ?? data ?? {};
   return payload as PublishResult;
+}
+
+export async function deleteArticle(
+  articleId: string,
+  input: ArticleDeleteInput,
+): Promise<ArticleDeleteResult> {
+  const res = await requestClient.post(`${ETL_PREFIX}/articles/${articleId}/delete`, {
+    tenant_schema: input.tenant_schema,
+    reason: input.reason || '手动删除',
+  });
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  return payload as ArticleDeleteResult;
 }
 
 export async function batchPublishArticles(input: BatchStatusInput): Promise<BatchStatusResult> {

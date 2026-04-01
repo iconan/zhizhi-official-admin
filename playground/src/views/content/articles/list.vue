@@ -14,6 +14,7 @@ import {
   batchParseArticles,
   batchPublishArticles,
   batchRestoreArticles,
+  deleteArticle,
   fetchArticles,
   publishArticle,
   transitionArticleStatus,
@@ -37,7 +38,7 @@ const statusColorMap: Record<ArticleStatus, string> = {
   crawled: 'default',
   parsed: 'blue',
   published: 'green',
-  archived: 'red',
+  archived: 'orange',
 };
 
 async function copyToClipboard(text: string) {
@@ -96,7 +97,7 @@ const columns: VxeTableGridOptions['columns'] = [
   {
     title: '操作',
     field: 'operation',
-    width: 280,
+    width: 360,
     fixed: 'right',
     showOverflow: false,
     cellRender: {
@@ -110,6 +111,7 @@ const columns: VxeTableGridOptions['columns'] = [
           text: '解析',
           disabled: (row: ArticleListItem) => row.status !== 'crawled',
           popconfirm: true,
+          confirmTitle: '确认解析',
           confirmMessage: '确认解析该文章？将生成 AST 结构和批注。',
         },
         {
@@ -117,7 +119,9 @@ const columns: VxeTableGridOptions['columns'] = [
           text: '发布',
           disabled: (row: ArticleListItem) => row.status !== 'parsed',
           popconfirm: true,
+          confirmTitle: '确认发布',
           confirmMessage: '确认发布该文章？',
+          class: (row: ArticleListItem) => row.status === 'parsed' ? 'text-green-500 hover:text-green-600' : '',
         },
         {
           code: 'archive',
@@ -126,6 +130,7 @@ const columns: VxeTableGridOptions['columns'] = [
           popconfirm: true,
           confirmTitle: '确认归档',
           confirmMessage: '确认归档该文章？',
+          class: (row: ArticleListItem) => row.status === 'published' ? 'text-orange-500 hover:text-orange-600' : '',
         },
         {
           code: 'restore',
@@ -134,6 +139,12 @@ const columns: VxeTableGridOptions['columns'] = [
           popconfirm: true,
           confirmTitle: '确认恢复',
           confirmMessage: '确认将文章恢复为已发布状态？',
+          class: (row: ArticleListItem) => row.status === 'archived' ? 'text-teal-500 hover:text-teal-600' : '',
+        },
+        {
+          code: 'delete',
+          confirmTitle: '确认永久删除',
+          confirmMessage: '确认永久删除该文章？删除后将同时清理关联素材和标注，且无法恢复。',
         },
       ],
     },
@@ -276,7 +287,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
                 return { items: [], total: 0 };
               }
               // 限制每个租户查询数量，避免过多数据
-              const perTenantLimit = Math.min(20, Math.ceil(limit / tenants.value.length));
+              // 注意：查全部租户时每个租户都从0开始查，前端合并后再分页
+              const perTenantLimit = Math.min(limit, Math.ceil(limit / tenants.value.length));
               const results = await Promise.all(
                 tenants.value
                   .filter((t) => t.schema_name)
@@ -285,6 +297,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
                       tenant_schema: tenant.schema_name,
                       ...queryParams,
                       limit: perTenantLimit,
+                      offset: 0,
                     }).catch(() => ({ items: [], total: 0, has_more: false }));
                     return result;
                   }),
@@ -480,6 +493,14 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
         reason: '恢复文章',
       });
       message.success('文章已恢复为已发布状态');
+    },
+    delete: async () => {
+      await deleteArticle(row.id, {
+        tenant_schema: tenantSchema,
+        reason: '手动删除',
+      });
+      selectedRows.value = selectedRows.value.filter((item) => item.id !== row.id);
+      message.success('文章已永久删除');
     },
   } as const;
 
@@ -882,20 +903,20 @@ async function handleBatchRestore() {
   @apply bg-green-100 border-green-600 shadow-sm;
 }
 
-/* 批量归档 - 红色 */
+/* 批量归档 - 橙色（与详情页归档按钮颜色一致） */
 .batch-btn-archive {
-  @apply cursor-pointer opacity-100 font-medium bg-red-50 border-red-500 text-red-600;
-}
-.batch-btn-archive:hover {
-  @apply bg-red-100 border-red-600 shadow-sm;
-}
-
-/* 批量恢复 - 橙色 */
-.batch-btn-restore {
   @apply cursor-pointer opacity-100 font-medium bg-orange-50 border-orange-500 text-orange-600;
 }
-.batch-btn-restore:hover {
+.batch-btn-archive:hover {
   @apply bg-orange-100 border-orange-600 shadow-sm;
+}
+
+/* 批量恢复 - 青绿色 */
+.batch-btn-restore {
+  @apply cursor-pointer opacity-100 font-medium bg-teal-50 border-teal-500 text-teal-600;
+}
+.batch-btn-restore:hover {
+  @apply bg-teal-100 border-teal-600 shadow-sm;
 }
 </style>
 
