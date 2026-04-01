@@ -6,7 +6,6 @@ import { Modal, Select, Tag, Tooltip, message } from 'ant-design-vue';
 import type { SelectValue } from 'ant-design-vue/es/select';
 import { Copy } from 'lucide-vue-next';
 import dayjs from 'dayjs';
-import { useDebounceFn } from '@vueuse/core';
 import { computed, nextTick, onMounted, ref, shallowRef } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -152,54 +151,87 @@ const selectedRows = shallowRef<ArticleListItem[]>([]);
 // 批量操作 loading 状态（防止重复提交）
 const batchProcessing = ref(false);
 
-// 防抖函数：优化频繁触发时选中行状态更新（15ms 约 600fps，快速响应同时避免卡顿）
-const debouncedSetSelectedRows = useDebounceFn((records: ArticleListItem[]) => {
+// 同步选中行状态，保持复选框点击反馈即时
+const syncSelectedRows = (records: ArticleListItem[]) => {
   selectedRows.value = records || [];
-}, 15);
+};
+
+const selectedRowStats = computed(() => {
+  let crawled = 0;
+  let parsed = 0;
+  let published = 0;
+  let archived = 0;
+
+  for (const row of selectedRows.value) {
+    switch (row.status) {
+      case 'crawled':
+        crawled += 1;
+        break;
+      case 'parsed':
+        parsed += 1;
+        break;
+      case 'published':
+        published += 1;
+        break;
+      case 'archived':
+        archived += 1;
+        break;
+    }
+  }
+
+  const total = selectedRows.value.length;
+  return {
+    total,
+    crawled,
+    parsed,
+    published,
+    archived,
+    nonCrawled: total - crawled,
+    nonParsed: total - parsed,
+    nonPublished: total - published,
+    nonArchived: total - archived,
+  };
+});
 
 // 批量操作可用性计算（操作时禁用按钮防止重复提交）
 const canBatchParse = computed(() => {
-  return !batchProcessing.value && selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'crawled');
+  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonCrawled === 0;
 });
 
 const canBatchPublish = computed(() => {
-  return !batchProcessing.value && selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'parsed');
+  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonParsed === 0;
 });
 
 const canBatchArchive = computed(() => {
-  return !batchProcessing.value && selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'published');
+  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonPublished === 0;
 });
 
 const canBatchRestore = computed(() => {
-  return !batchProcessing.value && selectedRows.value.length > 0 && selectedRows.value.every((row) => row.status === 'archived');
+  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonArchived === 0;
 });
 
 // 批量操作禁用原因提示
 const batchParseDisabledReason = computed(() => {
-  if (selectedRows.value.length === 0) return '请先选择文章';
-  const nonCrawled = selectedRows.value.filter((r) => r.status !== 'crawled');
-  if (nonCrawled.length > 0) return `包含 ${nonCrawled.length} 篇非已抓取状态文章`;
+  if (selectedRowStats.value.total === 0) return '请先选择文章';
+  if (selectedRowStats.value.nonCrawled > 0) return `包含 ${selectedRowStats.value.nonCrawled} 篇非已抓取状态文章`;
   return '';
 });
 
 const batchPublishDisabledReason = computed(() => {
-  if (selectedRows.value.length === 0) return '请先选择文章';
-  const nonParsed = selectedRows.value.filter((r) => r.status !== 'parsed');
-  if (nonParsed.length > 0) return `包含 ${nonParsed.length} 篇非已解析状态文章`;
+  if (selectedRowStats.value.total === 0) return '请先选择文章';
+  if (selectedRowStats.value.nonParsed > 0) return `包含 ${selectedRowStats.value.nonParsed} 篇非已解析状态文章`;
   return '';
 });
 
 const batchArchiveDisabledReason = computed(() => {
-  if (selectedRows.value.length === 0) return '请先选择文章';
-  const nonPublished = selectedRows.value.filter((r) => r.status !== 'published');
-  if (nonPublished.length > 0) return `包含 ${nonPublished.length} 篇非已发布状态文章`;
+  if (selectedRowStats.value.total === 0) return '请先选择文章';
+  if (selectedRowStats.value.nonPublished > 0) return `包含 ${selectedRowStats.value.nonPublished} 篇非已发布状态文章`;
   return '';
 });
 
 const batchRestoreDisabledReason = computed(() => {
-  if (selectedRows.value.length === 0) return '请先选择文章';
-  const nonArchived = selectedRows.value.filter((r) => r.status !== 'archived');
-  if (nonArchived.length > 0) return `包含 ${nonArchived.length} 篇非已归档状态文章`;
+  if (selectedRowStats.value.total === 0) return '请先选择文章';
+  if (selectedRowStats.value.nonArchived > 0) return `包含 ${selectedRowStats.value.nonArchived} 篇非已归档状态文章`;
   return '';
 });
 
@@ -298,13 +330,13 @@ const [Grid, gridApi] = useVbenVxeGrid({
       reserve: true,
     },
   },
-  // vxe-grid 事件配置 - 使用防抖优化频繁触发
+  // vxe-grid 事件配置 - 直接同步选中状态，保证复选框点击反馈即时
   gridEvents: {
     checkboxChange: ({ records }: { records: ArticleListItem[] }) => {
-      debouncedSetSelectedRows(records);
+      syncSelectedRows(records);
     },
     checkboxAll: ({ records }: { records: ArticleListItem[] }) => {
-      debouncedSetSelectedRows(records);
+      syncSelectedRows(records);
     },
   },
   formOptions: {
