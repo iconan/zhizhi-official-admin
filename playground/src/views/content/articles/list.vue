@@ -143,8 +143,11 @@ const columns: VxeTableGridOptions['columns'] = [
         },
         {
           code: 'delete',
+          text: '删除',
+          disabled: (row: ArticleListItem) => row.status !== 'archived',
           confirmTitle: '确认永久删除',
           confirmMessage: '确认永久删除该文章？删除后将同时清理关联素材和标注，且无法恢复。',
+          class: (row: ArticleListItem) => row.status === 'archived' ? 'text-red-500 hover:text-red-600' : '',
         },
       ],
     },
