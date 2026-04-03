@@ -76,7 +76,7 @@ async function loadSourceOptions() {
 }
 
 async function ensureSourceOptionsLoaded() {
-  if (!sourceOptions.value.length && !loadingSources.value) {
+  if (!sourceOptions.value?.length && !loadingSources.value) {
     await loadSourceOptions();
   }
 }

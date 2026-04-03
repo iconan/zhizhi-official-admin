@@ -44,17 +44,29 @@ export async function loginApi(data: AuthApi.LoginParams) {
 /** 刷新 accessToken */
 export async function refreshTokenApi(refreshToken?: string) {
   const res = await baseRequestClient.post<{
-    access_token: string;
-    refresh_token?: string;
+    code: number;
+    data: {
+      access_token: string;
+      refresh_token?: string;
+    };
+    message: string;
   }>(
     `${IAM_PREFIX}/refresh`,
     refreshToken ? { refresh_token: refreshToken } : null,
     { withCredentials: true },
   );
 
+  // baseRequestClient 返回完整 axios 响应，token 在 res.data.data 中
+  const response = res as unknown as {
+    data: {
+      code: number;
+      data: { access_token: string; refresh_token?: string };
+      message: string;
+    }
+  };
   return {
-    accessToken: res.access_token,
-    refreshToken: res.refresh_token,
+    accessToken: response.data?.data?.access_token,
+    refreshToken: response.data?.data?.refresh_token,
   } satisfies AuthApi.RefreshTokenResult;
 }
 

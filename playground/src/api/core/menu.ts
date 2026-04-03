@@ -58,9 +58,5 @@ export async function getAllMenusApi() {
     '/v1/admin/iam/menus/tree',
   );
   const items = (res as any)?.data?.items ?? (res as any)?.items ?? [];
-  const routes = mapMenuTree(items);
-  console.log('[menu] backend menu payload', res);
-  console.log('[menu] backend menu items', items);
-  console.log('[menu] mapped route records', routes);
-  return routes;
+  return mapMenuTree(items);
 }
