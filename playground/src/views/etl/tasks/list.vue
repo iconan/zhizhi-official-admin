@@ -19,11 +19,14 @@ import {
   type JobStatus,
   type MetricsSummary,
 } from '#/api/etl/jobs';
+import { fetchTenants, type IamTenant } from '#/api/iam/tenant';
 
 import CreateDrawer from './modules/create-drawer.vue';
 
 const POLL_INTERVAL = 10_000;
 const metrics = ref<MetricsSummary | null>(null);
+const tenantMap = ref<Record<string, IamTenant>>({});
+const tenantOptions = ref<{ label: string; value: string }[]>([]);
 let pollTimer: null | ReturnType<typeof setInterval> = null;
 const [CreateDrawerView, createDrawerApi] = useVbenDrawer({
   connectedComponent: CreateDrawer,
@@ -79,7 +82,18 @@ function canReplayEmbedding(row: JobItem) {
 
 const columns: VxeTableGridOptions['columns'] = [
   { field: 'job_id', title: '任务 ID', minWidth: 220 },
-  { field: 'tenant_schema', title: '所属区域', minWidth: 130 },
+  {
+    field: 'tenant_schema',
+    title: '所属区域',
+    minWidth: 130,
+    formatter: ({ cellValue }: { cellValue?: string }) => {
+      const tenant = tenantMap.value[cellValue ?? ''];
+      if (tenant) {
+        return `${tenant.name}`;
+      }
+      return cellValue || '--';
+    },
+  },
   {
     field: 'job_type',
     title: '任务类型',
@@ -196,10 +210,17 @@ const [Grid, gridApi] = useVbenVxeGrid({
         componentProps: { allowClear: true, placeholder: '任务 ID' },
       },
       {
-        component: 'Input',
+        component: 'Select',
         fieldName: 'tenant_schema',
         label: '所属区域',
-        componentProps: { allowClear: true, placeholder: 'tenant_schema' },
+        componentProps: {
+          allowClear: true,
+          options: tenantOptions,
+          showSearch: true,
+          optionFilterProp: 'label',
+          placeholder: '选择所属区域',
+          style: { width: '100%' },
+        },
       },
       {
         component: 'Select',
@@ -268,11 +289,34 @@ const [Grid, gridApi] = useVbenVxeGrid({
   },
 });
 
+async function loadTenants() {
+  try {
+    const { items } = await fetchTenants({
+      limit: 200,
+      offset: 0,
+      status: 'active',
+    });
+    tenantMap.value = items
+      .filter((t) => t.schema_name)
+      .reduce((acc, t) => {
+        acc[t.schema_name] = t;
+        return acc;
+      }, {} as Record<string, IamTenant>);
+    tenantOptions.value = items
+      .filter((t) => t.schema_name)
+      .map((t) => ({
+        label: `${t.name} · ${t.schema_name}`,
+        value: t.schema_name,
+      }));
+  } catch (error) {
+    console.error('[ETK] load tenants failed', error);
+  }
+}
+
 async function loadMetrics() {
   try {
     metrics.value = await fetchMetricsSummary();
   } catch (error) {
-    // 错误提示由全局拦截器统一处理
     console.error('[ETK] fetch metrics failed', error);
   }
 }
@@ -319,7 +363,6 @@ async function triggerReplayDeadLetter() {
         message.success(`已触发重放：${payload?.replayed_jobs ?? 0} 个任务，涉及 ${payload?.total_dead_letter_materials ?? 0} 条素材`);
         await refreshAll();
       } catch (error) {
-        // 错误提示由全局拦截器统一处理
         console.error('[ETK] replay dead letter failed', error);
       } finally {
         hide();
@@ -356,7 +399,6 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<JobItem>>
     await action();
     await refreshAll();
   } catch (error: any) {
-    // 错误提示由全局拦截器统一处理
     console.error('[ETK] job action failed', code, error);
   } finally {
     hide();
@@ -365,6 +407,7 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<JobItem>>
 
 onMounted(async () => {
   await nextTick();
+  await loadTenants();
   await refreshAll();
   startPolling();
   document.addEventListener('visibilitychange', handleVisibilityChange);

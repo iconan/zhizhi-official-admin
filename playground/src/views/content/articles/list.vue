@@ -85,7 +85,7 @@ const columns: VxeTableGridOptions['columns'] = [
       return source?.label || cellValue;
     },
   },
-  { field: 'author', title: '作者', width: 100 },
+  { field: 'author', title: '作者/责编', width: 100 },
   { field: 'publish_date', title: '发布日期', width: 110 },
   { field: 'status', title: '状态', width: 90, slots: { default: 'status' } },
   { field: 'word_count', title: '字数', width: 80 },
@@ -144,10 +144,10 @@ const columns: VxeTableGridOptions['columns'] = [
         {
           code: 'delete',
           text: '删除',
-          disabled: (row: ArticleListItem) => row.status !== 'archived',
+          disabled: (row: ArticleListItem) => row.status !== 'archived' && row.status !== 'parsed',
           confirmTitle: '确认永久删除',
           confirmMessage: '确认永久删除该文章？删除后将同时清理关联素材和标注，且无法恢复。',
-          class: (row: ArticleListItem) => row.status === 'archived' ? 'text-red-500 hover:text-red-600' : '',
+          class: (row: ArticleListItem) => (row.status === 'archived' || row.status === 'parsed') ? 'text-red-500 hover:text-red-600' : '',
         },
       ],
     },
