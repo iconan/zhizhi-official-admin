@@ -296,13 +296,12 @@ const [Grid, gridApi] = useVbenVxeGrid({
                 tenants.value
                   .filter((t) => t.schema_name)
                   .map(async (tenant) => {
-                    const result = await fetchArticles({
+                    return await fetchArticles({
                       tenant_schema: tenant.schema_name,
                       ...queryParams,
                       limit: perTenantLimit,
                       offset: 0,
                     }).catch(() => ({ items: [], total: 0, has_more: false }));
-                    return result;
                   }),
               );
               // 合并所有结果
