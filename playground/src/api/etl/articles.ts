@@ -115,6 +115,8 @@ export interface ArticleQuery {
   offset?: number;
 }
 
+export type ArticleAggregateQuery = Omit<ArticleQuery, 'tenant_schema'>;
+
 export interface ArticleListResponse {
   items: ArticleListItem[];
   total: number;
@@ -176,6 +178,20 @@ export interface BatchStatusResult {
 
 export async function fetchArticles(params: ArticleQuery): Promise<ArticleListResponse> {
   const res = await requestClient.get(`${ETL_PREFIX}/articles`, { params });
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? {};
+  const items = ((payload as any)?.items ?? []) as ArticleListItem[];
+  const total = (payload as any)?.total ?? items.length ?? 0;
+  const offset = (payload as any)?.offset ?? 0;
+  const limit = (payload as any)?.limit ?? 20;
+  const has_more = (payload as any)?.has_more ?? false;
+  return { items, total, offset, limit, has_more } as ArticleListResponse;
+}
+
+export async function fetchArticlesAggregate(
+  params: ArticleAggregateQuery,
+): Promise<ArticleListResponse> {
+  const res = await requestClient.get(`${ETL_PREFIX}/articles/aggregate`, { params });
   const data = (res as any)?.data ?? res;
   const payload = data?.data ?? data ?? {};
   const items = ((payload as any)?.items ?? []) as ArticleListItem[];

@@ -6,7 +6,7 @@ import { Modal, Select, Tag, Tooltip, message } from 'ant-design-vue';
 import type { SelectValue } from 'ant-design-vue/es/select';
 import { Copy } from 'lucide-vue-next';
 import dayjs from 'dayjs';
-import { computed, nextTick, onMounted, ref, shallowRef } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
@@ -16,6 +16,7 @@ import {
   batchRestoreArticles,
   deleteArticle,
   fetchArticles,
+  fetchArticlesAggregate,
   publishArticle,
   transitionArticleStatus,
   type ArticleListItem,
@@ -160,23 +161,32 @@ const tenants = ref<IamTenant[]>([]);
 const tenantMap = ref<Record<string, IamTenant>>({});
 const selectedTenant = ref<string>();
 const loadingTenants = ref(false);
-const selectedRows = shallowRef<ArticleListItem[]>([]);
+type SelectedArticleRow = Pick<ArticleListItem, 'id' | 'tenant_schema' | 'status'>;
+const selectedRows = shallowRef<SelectedArticleRow[]>([]);
+const selectedRowStats = ref({
+  total: 0,
+  crawled: 0,
+  parsed: 0,
+  published: 0,
+  archived: 0,
+  nonCrawled: 0,
+  nonParsed: 0,
+  nonPublished: 0,
+  nonArchived: 0,
+});
+let selectedRowsSyncFrame: number | null = null;
+let tenantQueryFrame: number | null = null;
 
 // 批量操作 loading 状态（防止重复提交）
 const batchProcessing = ref(false);
 
-// 同步选中行状态，保持复选框点击反馈即时
-const syncSelectedRows = (records: ArticleListItem[]) => {
-  selectedRows.value = records || [];
-};
-
-const selectedRowStats = computed(() => {
+function applySelectedRowsSnapshot(snapshot: SelectedArticleRow[]) {
   let crawled = 0;
   let parsed = 0;
   let published = 0;
   let archived = 0;
 
-  for (const row of selectedRows.value) {
+  for (const row of snapshot) {
     switch (row.status) {
       case 'crawled':
         crawled += 1;
@@ -193,8 +203,9 @@ const selectedRowStats = computed(() => {
     }
   }
 
-  const total = selectedRows.value.length;
-  return {
+  const total = snapshot.length;
+  selectedRows.value = snapshot;
+  selectedRowStats.value = {
     total,
     crawled,
     parsed,
@@ -205,7 +216,24 @@ const selectedRowStats = computed(() => {
     nonPublished: total - published,
     nonArchived: total - archived,
   };
-});
+}
+
+// 同步选中行状态，保持复选框点击反馈即时
+const syncSelectedRows = (records: ArticleListItem[]) => {
+  if (selectedRowsSyncFrame !== null) {
+    cancelAnimationFrame(selectedRowsSyncFrame);
+  }
+
+  selectedRowsSyncFrame = requestAnimationFrame(() => {
+    const snapshot = (records || []).map((row) => ({
+      id: row.id,
+      tenant_schema: row.tenant_schema,
+      status: row.status,
+    }));
+    applySelectedRowsSnapshot(snapshot);
+    selectedRowsSyncFrame = null;
+  });
+};
 
 // 批量操作可用性计算（操作时禁用按钮防止重复提交）
 const canBatchParse = computed(() => {
@@ -267,7 +295,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
     pagerConfig: { enabled: true, pageSize: 20, pageSizes: [10, 20, 50, 100] },
     proxyConfig: {
       enabled: true,
-      autoLoad: true,
+      autoLoad: false,
       ajax: {
         query: async ({ page }: any, formValues: any) => {
           const limit = page?.pageSize || 20;
@@ -284,49 +312,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
           };
 
           try {
-            // 没有选择区域时，并行查询所有租户
-            if (!selectedTenant.value) {
-              if (tenants.value.length === 0) {
-                return { items: [], total: 0 };
-              }
-              // 限制每个租户查询数量，避免过多数据
-              // 注意：查全部租户时每个租户都从0开始查，前端合并后再分页
-              const perTenantLimit = Math.min(limit, Math.ceil(limit / tenants.value.length));
-              const results = await Promise.all(
-                tenants.value
-                  .filter((t) => t.schema_name)
-                  .map(async (tenant) => {
-                    return await fetchArticles({
-                      tenant_schema: tenant.schema_name,
-                      ...queryParams,
-                      limit: perTenantLimit,
-                      offset: 0,
-                    }).catch(() => ({ items: [], total: 0, has_more: false }));
-                  }),
-              );
-              // 合并所有结果
-              const allItems = results.flatMap((r) => r.items);
-              // 按更新时间排序
-              allItems.sort((a, b) => {
-                const dateA = new Date(a.updated_at || a.created_at).getTime();
-                const dateB = new Date(b.updated_at || b.created_at).getTime();
-                return dateB - dateA;
-              });
-              // 分页处理
-              const paginatedItems = allItems.slice(offset, offset + limit);
-              return {
-                items: paginatedItems,
-                total: allItems.length,
-                has_more: allItems.length > offset + limit,
-              } as any;
-            } else {
-              // 查询单个租户
-              const { items, total, has_more } = await fetchArticles({
-                tenant_schema: selectedTenant.value,
-                ...queryParams,
-              });
-              return { items, total, has_more } as any;
-            }
+            const { items, total, has_more } = await loadArticleList(queryParams);
+            return { items, total, has_more } as any;
           } catch (error) {
             message.error('加载文章列表失败，请稍后重试');
             return { items: [], total: 0 };
@@ -413,6 +400,53 @@ onMounted(async () => {
   // 租户加载完成后自动查询数据
   await gridApi.query();
 });
+
+onBeforeUnmount(() => {
+  if (selectedRowsSyncFrame !== null) {
+    cancelAnimationFrame(selectedRowsSyncFrame);
+    selectedRowsSyncFrame = null;
+  }
+  if (tenantQueryFrame !== null) {
+    cancelAnimationFrame(tenantQueryFrame);
+    tenantQueryFrame = null;
+  }
+});
+
+async function loadArticleList(queryParams: {
+  status?: ArticleStatus;
+  source_name?: string;
+  keyword?: string;
+  date_from?: string;
+  date_to?: string;
+  limit: number;
+  offset: number;
+}) {
+  if (!selectedTenant.value) {
+    return await fetchArticlesAggregate(queryParams);
+  }
+
+  return await fetchArticles({
+    tenant_schema: selectedTenant.value,
+    ...queryParams,
+  });
+}
+
+async function clearGridSelection() {
+  applySelectedRowsSnapshot([]);
+
+  await nextTick();
+  const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
+  if (vxeGrid?.clearCheckboxRow) {
+    await vxeGrid.clearCheckboxRow();
+  } else if (vxeGrid?.setCheckboxRow) {
+    await vxeGrid.setCheckboxRow([], false);
+  }
+}
+
+async function clearSelectionAndReload() {
+  await clearGridSelection();
+  await gridApi.query();
+}
 
 async function loadSources() {
   try {
@@ -501,7 +535,7 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
         tenant_schema: tenantSchema,
         reason: '手动删除',
       });
-      selectedRows.value = selectedRows.value.filter((item) => item.id !== row.id);
+      applySelectedRowsSnapshot(selectedRows.value.filter((item) => item.id !== row.id));
       message.success('文章已永久删除');
     },
   } as const;
@@ -521,14 +555,29 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
 }
 
 function handleTenantChange(value: SelectValue) {
-  selectedTenant.value = value as string;
-  // 自动刷新列表
-  gridApi.query();
+  const nextTenant = (value as string) || undefined;
+  if (selectedTenant.value === nextTenant) {
+    return;
+  }
+
+  selectedTenant.value = nextTenant;
+
+  if (tenantQueryFrame !== null) {
+    cancelAnimationFrame(tenantQueryFrame);
+  }
+
+  tenantQueryFrame = requestAnimationFrame(async () => {
+    try {
+      await clearSelectionAndReload();
+    } finally {
+      tenantQueryFrame = null;
+    }
+  });
 }
 
 // 按租户 schema 分组文章
-function groupByTenant(rows: ArticleListItem[]): Map<string, ArticleListItem[]> {
-  const groups = new Map<string, ArticleListItem[]>();
+function groupByTenant(rows: SelectedArticleRow[]): Map<string, SelectedArticleRow[]> {
+  const groups = new Map<string, SelectedArticleRow[]>();
   for (const row of rows) {
     const schema = row.tenant_schema;
     if (!groups.has(schema)) {
@@ -602,17 +651,7 @@ async function handleBatchParse() {
           message.warning(`部分文章解析失败:\n${failureReasons}`, 5);
         }
 
-        selectedRows.value = [];
-        // 清除 vxe-grid 复选框选中状态 - 使用多种方式确保清除成功
-        await nextTick();
-        const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
-        if (vxeGrid?.clearCheckboxRow) {
-          await vxeGrid.clearCheckboxRow();
-        } else if (vxeGrid?.setCheckboxRow) {
-          await vxeGrid.setCheckboxRow([], false);
-        }
-        await nextTick();
-        await gridApi.query();
+        await clearSelectionAndReload();
       } catch (error: any) {
         // 错误提示由全局拦截器统一处理
         console.error('[Content] batch parse failed', error);
@@ -686,17 +725,7 @@ async function handleBatchPublish() {
           message.warning(`部分文章发布失败:\n${failureReasons}`, 5);
         }
 
-        selectedRows.value = [];
-        // 清除 vxe-grid 复选框选中状态 - 使用多种方式确保清除成功
-        await nextTick();
-        const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
-        if (vxeGrid?.clearCheckboxRow) {
-          await vxeGrid.clearCheckboxRow();
-        } else if (vxeGrid?.setCheckboxRow) {
-          await vxeGrid.setCheckboxRow([], false);
-        }
-        await nextTick();
-        await gridApi.query();
+        await clearSelectionAndReload();
       } catch (error: any) {
         // 错误提示由全局拦截器统一处理
         console.error('[Content] batch publish failed', error);
@@ -771,17 +800,7 @@ async function handleBatchArchive() {
           message.warning(`部分文章归档失败:\n${failureReasons}`, 5);
         }
 
-        selectedRows.value = [];
-        // 清除 vxe-grid 复选框选中状态 - 使用多种方式确保清除成功
-        await nextTick();
-        const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
-        if (vxeGrid?.clearCheckboxRow) {
-          await vxeGrid.clearCheckboxRow();
-        } else if (vxeGrid?.setCheckboxRow) {
-          await vxeGrid.setCheckboxRow([], false);
-        }
-        await nextTick();
-        await gridApi.query();
+        await clearSelectionAndReload();
       } catch (error: any) {
         // 错误提示由全局拦截器统一处理
         console.error('[Content] batch archive failed', error);
@@ -855,17 +874,7 @@ async function handleBatchRestore() {
           message.warning(`部分文章恢复失败:\n${failureReasons}`, 5);
         }
 
-        selectedRows.value = [];
-        // 清除 vxe-grid 复选框选中状态 - 使用多种方式确保清除成功
-        await nextTick();
-        const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
-        if (vxeGrid?.clearCheckboxRow) {
-          await vxeGrid.clearCheckboxRow();
-        } else if (vxeGrid?.setCheckboxRow) {
-          await vxeGrid.setCheckboxRow([], false);
-        }
-        await nextTick();
-        await gridApi.query();
+        await clearSelectionAndReload();
       } catch (error: any) {
         // 错误提示由全局拦截器统一处理
         console.error('[Content] batch restore failed', error);
