@@ -664,7 +664,7 @@ async function handleBatchParse() {
 
   let modalRef: ReturnType<typeof Modal.confirm> | null = null;
   modalRef = Modal.confirm({
-    title: '确认批量解析',
+    title: '批量解析',
     content: `已选择 ${selectedRows.length} 篇已抓取文章，确认批量解析？将生成 AST 结构和批注。`,
     transitionName: '',
     maskTransitionName: '',
@@ -727,7 +727,7 @@ async function handleBatchPublish() {
 
   let modalRef: ReturnType<typeof Modal.confirm> | null = null;
   modalRef = Modal.confirm({
-    title: '确认批量发布',
+    title: '批量发布',
     content: `已选择 ${selectedRows.length} 篇文章，确认批量发布？`,
     transitionName: '',
     maskTransitionName: '',
@@ -790,7 +790,7 @@ async function handleBatchArchive() {
 
   let modalRef: ReturnType<typeof Modal.confirm> | null = null;
   modalRef = Modal.confirm({
-    title: '确认批量归档',
+    title: '批量归档',
     content: `已选择 ${selectedRows.length} 篇已发布文章，确认批量归档？`,
     okType: 'danger',
     transitionName: '',
@@ -854,7 +854,7 @@ async function handleBatchRestore() {
 
   let modalRef: ReturnType<typeof Modal.confirm> | null = null;
   modalRef = Modal.confirm({
-    title: '确认批量恢复',
+    title: '批量恢复',
     content: `已选择 ${selectedRows.length} 篇已归档文章，确认批量恢复为已发布状态？`,
     transitionName: '',
     maskTransitionName: '',
