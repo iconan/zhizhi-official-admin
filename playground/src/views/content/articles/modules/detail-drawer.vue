@@ -295,6 +295,7 @@ const canReparse = (status?: ArticleStatus) => status === 'parsed' || status ===
                   <Tag v-if="anno.is_fallback" color="error">Fallback</Tag>
                 </div>
                 <div class="mb-1 text-sm text-gray-500">原文: {{ anno.exact_text }}</div>
+                <div class="mb-1 text-cyan-600">科普: {{ anno.simple_explain || '无' }}</div>
                 <div class="mb-1 text-blue-600">白话: {{ anno.replace_white_talk }}</div>
                 <div class="text-gray-700">解读: {{ anno.deep_explain || '无' }}</div>
               </div>

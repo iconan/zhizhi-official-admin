@@ -25,6 +25,7 @@ export interface ArticleParagraphNode {
   type: 'text' | 'highlight' | 'fallback_card';
   content?: string;
   exact_text?: string;
+  simple_explain?: string;
   replace_white_talk?: string;
   deep_explain?: string;
 }
@@ -38,6 +39,7 @@ export interface ArticleAnnotation {
   id: string;
   pid: string;
   exact_text: string;
+  simple_explain?: string;
   replace_white_talk: string;
   deep_explain: string;
   is_fallback: boolean;

@@ -129,8 +129,9 @@ function renderContent(): string {
             :key="anno.id"
             class="rounded-lg bg-amber-50 p-3 text-sm"
           >
-            <div class="mb-1 font-medium text-amber-800">{{ anno.exact_text }}</div>
-            <div class="text-amber-700">{{ anno.replace_white_talk }}</div>
+            <div class="mb-1 font-medium text-amber-800">原文：{{ anno.exact_text }}</div>
+            <div class="mb-1 text-cyan-700">科普: {{ anno.simple_explain || '无' }}</div>
+            <div class="text-amber-700">白话：{{ anno.replace_white_talk }}</div>
           </div>
           <div v-if="article.annotations.filter(a => !a.is_fallback).length > 5" class="text-center text-sm text-gray-500">
             还有 {{ article.annotations.filter(a => !a.is_fallback).length - 5 }} 条批注...
