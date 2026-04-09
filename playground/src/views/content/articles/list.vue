@@ -266,7 +266,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       },
     },
     rowConfig: { keyField: 'id' },
-    toolbarConfig: { custom: true, export: false, refresh: true, zoom: true },
+    toolbarConfig: { custom: true, export: false, refresh: false, zoom: true },
     checkboxConfig: {
       highlight: true,
       range: true,
@@ -415,6 +415,10 @@ function flushPendingBatchResult() {
 
 function scheduleGridQuery() {
   void gridApi.query();
+}
+
+function handleToolbarRefresh() {
+  scheduleGridQuery();
 }
 
 function runBatchTaskInModal(
@@ -921,6 +925,15 @@ async function handleBatchRestore() {
 .batch-btn-restore:hover {
   @apply bg-teal-100 border-teal-600 shadow-sm;
 }
+
+/* 刷新按钮 - 中性样式 */
+.batch-btn-refresh {
+  @apply cursor-pointer opacity-100 font-medium bg-white border-gray-400 text-gray-700;
+}
+
+.batch-btn-refresh:hover {
+  @apply bg-gray-50 border-gray-500 shadow-sm;
+}
 </style>
 
 <template>
@@ -991,6 +1004,18 @@ async function handleBatchRestore() {
               </button>
             </Tooltip>
           </div>
+
+          <div class="h-6 w-px bg-gray-300"></div>
+
+          <Tooltip :title="batchProcessing ? '批量任务执行中' : '刷新列表'">
+            <button
+              :class="['batch-btn', 'batch-btn-refresh']"
+              :disabled="batchProcessing"
+              @click="handleToolbarRefresh"
+            >
+              刷新
+            </button>
+          </Tooltip>
         </div>
       </template>
       <template #article-id="{ row }">
