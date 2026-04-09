@@ -166,6 +166,11 @@ let tenantQueryFrame: number | null = null;
 let deferredClearTimer: ReturnType<typeof setTimeout> | null = null;
 let latestQueryToken = 0;
 const HOLD_CONFIRM_MODAL_OPEN: Promise<never> = new Promise(() => {});
+let pendingBatchResult: {
+  type: 'error' | 'success' | 'warning';
+  content: string;
+  duration: number;
+} | null = null;
 
 // 批量操作 loading 状态（防止重复提交）
 const batchProcessing = ref(false);
@@ -386,10 +391,25 @@ function clearGridSelectionDeferred() {
 }
 
 function showBatchResult(type: 'error' | 'success' | 'warning', content: string, duration = 6) {
+  if (batchProcessing.value) {
+    pendingBatchResult = { type, content, duration };
+    return;
+  }
   message.open({
     type,
     content,
     duration,
+  });
+}
+
+function flushPendingBatchResult() {
+  if (!pendingBatchResult) return;
+  const result = pendingBatchResult;
+  pendingBatchResult = null;
+  message.open({
+    type: result.type,
+    content: result.content,
+    duration: result.duration,
   });
 }
 
@@ -424,6 +444,11 @@ function runBatchTaskInModal(
     })
     .then(() => {
       modalRef?.destroy();
+      flushPendingBatchResult();
+      setTimeout(() => {
+        clearGridSelectionDeferred();
+        scheduleGridQuery();
+      }, 150);
     })
     .catch((error) => {
       modalRef?.update({
@@ -624,6 +649,8 @@ async function handleBatchParse() {
   modalRef = Modal.confirm({
     title: '确认批量解析',
     content: `已选择 ${selectedRows.length} 篇已抓取文章，确认批量解析？将生成 AST 结构和批注。`,
+    transitionName: '',
+    maskTransitionName: '',
     onOk: () => {
       void runBatchTaskInModal(modalRef, async () => {
         let totalSuccess = 0;
@@ -654,9 +681,6 @@ async function handleBatchParse() {
             .join('\n');
           message.warning(`部分文章解析失败:\n${failureReasons}`, 5);
         }
-
-        clearGridSelectionDeferred();
-        scheduleGridQuery();
       });
       return HOLD_CONFIRM_MODAL_OPEN;
     },
@@ -688,6 +712,8 @@ async function handleBatchPublish() {
   modalRef = Modal.confirm({
     title: '确认批量发布',
     content: `已选择 ${selectedRows.length} 篇文章，确认批量发布？`,
+    transitionName: '',
+    maskTransitionName: '',
     onOk: () => {
       void runBatchTaskInModal(modalRef, async () => {
         let totalSuccess = 0;
@@ -718,9 +744,6 @@ async function handleBatchPublish() {
             .join('\n');
           message.warning(`部分文章发布失败:\n${failureReasons}`, 5);
         }
-
-        clearGridSelectionDeferred();
-        scheduleGridQuery();
       });
       return HOLD_CONFIRM_MODAL_OPEN;
     },
@@ -753,6 +776,8 @@ async function handleBatchArchive() {
     title: '确认批量归档',
     content: `已选择 ${selectedRows.length} 篇已发布文章，确认批量归档？`,
     okType: 'danger',
+    transitionName: '',
+    maskTransitionName: '',
     onOk: () => {
       void runBatchTaskInModal(modalRef, async () => {
         let totalSuccess = 0;
@@ -783,9 +808,6 @@ async function handleBatchArchive() {
             .join('\n');
           message.warning(`部分文章归档失败:\n${failureReasons}`, 5);
         }
-
-        clearGridSelectionDeferred();
-        scheduleGridQuery();
       });
       return HOLD_CONFIRM_MODAL_OPEN;
     },
@@ -817,6 +839,8 @@ async function handleBatchRestore() {
   modalRef = Modal.confirm({
     title: '确认批量恢复',
     content: `已选择 ${selectedRows.length} 篇已归档文章，确认批量恢复为已发布状态？`,
+    transitionName: '',
+    maskTransitionName: '',
     onOk: () => {
       void runBatchTaskInModal(modalRef, async () => {
         let totalSuccess = 0;
@@ -847,9 +871,6 @@ async function handleBatchRestore() {
             .join('\n');
           message.warning(`部分文章恢复失败:\n${failureReasons}`, 5);
         }
-
-        clearGridSelectionDeferred();
-        scheduleGridQuery();
       });
       return HOLD_CONFIRM_MODAL_OPEN;
     },
