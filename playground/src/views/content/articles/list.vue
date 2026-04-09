@@ -4,7 +4,7 @@ import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 import { Page, useVbenDrawer } from '@vben/common-ui';
 import { Modal, Select, Tag, Tooltip, message } from 'ant-design-vue';
 import type { SelectValue } from 'ant-design-vue/es/select';
-import { Copy } from 'lucide-vue-next';
+import { Copy, RefreshCw } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -928,7 +928,7 @@ async function handleBatchRestore() {
 
 /* 刷新按钮 - 中性样式 */
 .batch-btn-refresh {
-  @apply cursor-pointer opacity-100 font-medium bg-white border-gray-400 text-gray-700;
+  @apply inline-flex items-center justify-center w-7 h-7 p-0 cursor-pointer opacity-100 bg-white border-gray-400 text-gray-700;
 }
 
 .batch-btn-refresh:hover {
@@ -1013,7 +1013,7 @@ async function handleBatchRestore() {
               :disabled="batchProcessing"
               @click="handleToolbarRefresh"
             >
-              刷新
+              <RefreshCw class="h-3.5 w-3.5" />
             </button>
           </Tooltip>
         </div>
