@@ -6,7 +6,7 @@ import { Modal, Select, Tag, Tooltip, message } from 'ant-design-vue';
 import type { SelectValue } from 'ant-design-vue/es/select';
 import { Copy } from 'lucide-vue-next';
 import dayjs from 'dayjs';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
@@ -162,118 +162,53 @@ const tenantMap = ref<Record<string, IamTenant>>({});
 const selectedTenant = ref<string>();
 const loadingTenants = ref(false);
 type SelectedArticleRow = Pick<ArticleListItem, 'id' | 'tenant_schema' | 'status'>;
-const selectedRows = shallowRef<SelectedArticleRow[]>([]);
-const selectedRowStats = ref({
-  total: 0,
-  crawled: 0,
-  parsed: 0,
-  published: 0,
-  archived: 0,
-  nonCrawled: 0,
-  nonParsed: 0,
-  nonPublished: 0,
-  nonArchived: 0,
-});
-let selectedRowsSyncFrame: number | null = null;
 let tenantQueryFrame: number | null = null;
+let deferredClearTimer: ReturnType<typeof setTimeout> | null = null;
+let latestQueryToken = 0;
+const HOLD_CONFIRM_MODAL_OPEN: Promise<never> = new Promise(() => {});
 
 // 批量操作 loading 状态（防止重复提交）
 const batchProcessing = ref(false);
 
-function applySelectedRowsSnapshot(snapshot: SelectedArticleRow[]) {
-  let crawled = 0;
-  let parsed = 0;
-  let published = 0;
-  let archived = 0;
-
-  for (const row of snapshot) {
-    switch (row.status) {
-      case 'crawled':
-        crawled += 1;
-        break;
-      case 'parsed':
-        parsed += 1;
-        break;
-      case 'published':
-        published += 1;
-        break;
-      case 'archived':
-        archived += 1;
-        break;
-    }
-  }
-
-  const total = snapshot.length;
-  selectedRows.value = snapshot;
-  selectedRowStats.value = {
-    total,
-    crawled,
-    parsed,
-    published,
-    archived,
-    nonCrawled: total - crawled,
-    nonParsed: total - parsed,
-    nonPublished: total - published,
-    nonArchived: total - archived,
-  };
-}
-
-// 同步选中行状态，保持复选框点击反馈即时
-const syncSelectedRows = (records: ArticleListItem[]) => {
-  if (selectedRowsSyncFrame !== null) {
-    cancelAnimationFrame(selectedRowsSyncFrame);
-  }
-
-  selectedRowsSyncFrame = requestAnimationFrame(() => {
-    const snapshot = (records || []).map((row) => ({
-      id: row.id,
-      tenant_schema: row.tenant_schema,
-      status: row.status,
-    }));
-    applySelectedRowsSnapshot(snapshot);
-    selectedRowsSyncFrame = null;
-  });
-};
-
 // 批量操作可用性计算（操作时禁用按钮防止重复提交）
 const canBatchParse = computed(() => {
-  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonCrawled === 0;
+  return !batchProcessing.value && !!selectedTenant.value;
 });
 
 const canBatchPublish = computed(() => {
-  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonParsed === 0;
+  return !batchProcessing.value && !!selectedTenant.value;
 });
 
 const canBatchArchive = computed(() => {
-  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonPublished === 0;
+  return !batchProcessing.value && !!selectedTenant.value;
 });
 
 const canBatchRestore = computed(() => {
-  return !batchProcessing.value && selectedRowStats.value.total > 0 && selectedRowStats.value.nonArchived === 0;
+  return !batchProcessing.value && !!selectedTenant.value;
 });
 
 // 批量操作禁用原因提示
 const batchParseDisabledReason = computed(() => {
-  if (selectedRowStats.value.total === 0) return '请先选择文章';
-  if (selectedRowStats.value.nonCrawled > 0) return `包含 ${selectedRowStats.value.nonCrawled} 篇非已抓取状态文章`;
+  if (!selectedTenant.value) return '请先选择所属区域';
+  if (batchProcessing.value) return '批量任务执行中';
   return '';
 });
 
 const batchPublishDisabledReason = computed(() => {
-  if (selectedRowStats.value.total === 0) return '请先选择文章';
-  if (selectedRowStats.value.nonParsed > 0) return `包含 ${selectedRowStats.value.nonParsed} 篇非已解析状态文章`;
+  if (!selectedTenant.value) return '请先选择所属区域';
+  if (batchProcessing.value) return '批量任务执行中';
   return '';
 });
 
 const batchArchiveDisabledReason = computed(() => {
-  if (selectedRowStats.value.total === 0) return '请先选择文章';
-  if (selectedRowStats.value.nonPublished > 0) return `包含 ${selectedRowStats.value.nonPublished} 篇非已发布状态文章`;
+  if (!selectedTenant.value) return '请先选择所属区域';
+  if (batchProcessing.value) return '批量任务执行中';
   return '';
 });
 
 const batchRestoreDisabledReason = computed(() => {
-  if (selectedRowStats.value.total === 0) return '请先选择文章';
-  if (selectedRowStats.value.nonArchived > 0) return `包含 ${selectedRowStats.value.nonArchived} 篇非已归档状态文章`;
+  if (!selectedTenant.value) return '请先选择所属区域';
+  if (batchProcessing.value) return '批量任务执行中';
   return '';
 });
 
@@ -298,6 +233,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       autoLoad: false,
       ajax: {
         query: async ({ page }: any, formValues: any) => {
+          const queryToken = ++latestQueryToken;
           const limit = page?.pageSize || 20;
           const offset = ((page?.currentPage || 1) - 1) * limit;
           const dateRange = formValues?.date_range;
@@ -313,6 +249,9 @@ const [Grid, gridApi] = useVbenVxeGrid({
 
           try {
             const { items, total, has_more } = await loadArticleList(queryParams);
+            if (queryToken !== latestQueryToken) {
+              return { items: [], total: 0, has_more: false } as any;
+            }
             return { items, total, has_more } as any;
           } catch (error) {
             message.error('加载文章列表失败，请稍后重试');
@@ -326,19 +265,11 @@ const [Grid, gridApi] = useVbenVxeGrid({
     checkboxConfig: {
       highlight: true,
       range: true,
+      checkMethod: () => Boolean(selectedTenant.value),
       // 优化：使用默认触发方式，减少不必要的更新
       trigger: 'default',
       // 优化：启用虚拟滚动时保持选中状态
       reserve: true,
-    },
-  },
-  // vxe-grid 事件配置 - 直接同步选中状态，保证复选框点击反馈即时
-  gridEvents: {
-    checkboxChange: ({ records }: { records: ArticleListItem[] }) => {
-      syncSelectedRows(records);
-    },
-    checkboxAll: ({ records }: { records: ArticleListItem[] }) => {
-      syncSelectedRows(records);
     },
   },
   formOptions: {
@@ -402,13 +333,13 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  if (selectedRowsSyncFrame !== null) {
-    cancelAnimationFrame(selectedRowsSyncFrame);
-    selectedRowsSyncFrame = null;
-  }
   if (tenantQueryFrame !== null) {
     cancelAnimationFrame(tenantQueryFrame);
     tenantQueryFrame = null;
+  }
+  if (deferredClearTimer !== null) {
+    clearTimeout(deferredClearTimer);
+    deferredClearTimer = null;
   }
 });
 
@@ -432,8 +363,6 @@ async function loadArticleList(queryParams: {
 }
 
 async function clearGridSelection() {
-  applySelectedRowsSnapshot([]);
-
   await nextTick();
   const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
   if (vxeGrid?.clearCheckboxRow) {
@@ -441,11 +370,81 @@ async function clearGridSelection() {
   } else if (vxeGrid?.setCheckboxRow) {
     await vxeGrid.setCheckboxRow([], false);
   }
+  if (typeof vxeGrid?.clearCheckboxReserve === 'function') {
+    await vxeGrid.clearCheckboxReserve();
+  }
+}
+
+function clearGridSelectionDeferred() {
+  if (deferredClearTimer !== null) {
+    clearTimeout(deferredClearTimer);
+  }
+  deferredClearTimer = setTimeout(() => {
+    deferredClearTimer = null;
+    void clearGridSelection();
+  }, 0);
+}
+
+function showBatchResult(type: 'error' | 'success' | 'warning', content: string, duration = 6) {
+  message.open({
+    type,
+    content,
+    duration,
+  });
+}
+
+function scheduleGridQuery() {
+  void gridApi.query();
+}
+
+function runBatchTaskInModal(
+  modalRef: { destroy: () => void; update: (config: Record<string, any>) => void } | null,
+  task: () => Promise<void>,
+) {
+  if (batchProcessing.value) {
+    return Promise.resolve();
+  }
+  modalRef?.update({
+    okText: '批量执行中',
+    okButtonProps: {
+      loading: true,
+    },
+    cancelButtonProps: {
+      disabled: true,
+    },
+  });
+
+  return Promise.resolve()
+    .then(async () => {
+      await new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), 0);
+      });
+      batchProcessing.value = true;
+      await task();
+    })
+    .then(() => {
+      modalRef?.destroy();
+    })
+    .catch((error) => {
+      modalRef?.update({
+        okText: '确定',
+        okButtonProps: {
+          loading: false,
+        },
+        cancelButtonProps: {
+          disabled: false,
+        },
+      });
+      return Promise.reject(error);
+    })
+    .finally(() => {
+      batchProcessing.value = false;
+    });
 }
 
 async function clearSelectionAndReload() {
-  await clearGridSelection();
   await gridApi.query();
+  clearGridSelectionDeferred();
 }
 
 async function loadSources() {
@@ -535,7 +534,6 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
         tenant_schema: tenantSchema,
         reason: '手动删除',
       });
-      applySelectedRowsSnapshot(selectedRows.value.filter((item) => item.id !== row.id));
       message.success('文章已永久删除');
     },
   } as const;
@@ -546,7 +544,7 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
   try {
     await action();
     if (code !== 'preview' && code !== 'detail') {
-      await gridApi.query();
+      scheduleGridQuery();
     }
   } catch (error: any) {
     // 错误提示由全局拦截器统一处理
@@ -555,12 +553,7 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
 }
 
 function handleTenantChange(value: SelectValue) {
-  const nextTenant = (value as string) || undefined;
-  if (selectedTenant.value === nextTenant) {
-    return;
-  }
-
-  selectedTenant.value = nextTenant;
+  selectedTenant.value = (value as string) || undefined;
 
   if (tenantQueryFrame !== null) {
     cancelAnimationFrame(tenantQueryFrame);
@@ -575,89 +568,97 @@ function handleTenantChange(value: SelectValue) {
   });
 }
 
-// 按租户 schema 分组文章
-function groupByTenant(rows: SelectedArticleRow[]): Map<string, SelectedArticleRow[]> {
-  const groups = new Map<string, SelectedArticleRow[]>();
-  for (const row of rows) {
-    const schema = row.tenant_schema;
-    if (!groups.has(schema)) {
-      groups.set(schema, []);
-    }
-    groups.get(schema)!.push(row);
+function getSelectedRowsSnapshot(): SelectedArticleRow[] {
+  const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
+  const currentRecords: ArticleListItem[] =
+    typeof vxeGrid?.getCheckboxRecords === 'function' ? vxeGrid.getCheckboxRecords() : [];
+  const reserveRecords: ArticleListItem[] =
+    typeof vxeGrid?.getCheckboxReserveRecords === 'function'
+      ? vxeGrid.getCheckboxReserveRecords()
+      : [];
+  const merged = [...(currentRecords || []), ...(reserveRecords || [])];
+  const uniqueRows = new Map<string, SelectedArticleRow>();
+  for (const row of merged) {
+    if (!row?.id) continue;
+    uniqueRows.set(row.id, {
+      id: row.id,
+      tenant_schema: row.tenant_schema,
+      status: row.status,
+    });
   }
-  return groups;
+  return [...uniqueRows.values()];
+}
+
+function countStatusMismatch(rows: SelectedArticleRow[], expectedStatus: ArticleStatus) {
+  let mismatch = 0;
+  for (const row of rows) {
+    if (row.status !== expectedStatus) {
+      mismatch += 1;
+    }
+  }
+  return mismatch;
 }
 
 // 批量解析（仅 crawled -> parsed）
 async function handleBatchParse() {
   if (!canBatchParse.value || batchProcessing.value) return;
+  if (!selectedTenant.value) {
+    message.warning('请先选择所属区域');
+    return;
+  }
+  const tenantSchema = selectedTenant.value;
 
-  // 按租户分组
-  const groups = groupByTenant(selectedRows.value);
+  const selectedRows = getSelectedRowsSnapshot();
+  if (selectedRows.length === 0) {
+    message.warning('请先选择文章');
+    return;
+  }
 
-  Modal.confirm({
+  const mismatchCount = countStatusMismatch(selectedRows, 'crawled');
+  if (mismatchCount > 0) {
+    message.warning(`包含 ${mismatchCount} 篇非已抓取状态文章`);
+    return;
+  }
+
+  let modalRef: ReturnType<typeof Modal.confirm> | null = null;
+  modalRef = Modal.confirm({
     title: '确认批量解析',
-    content: `已选择 ${selectedRows.value.length} 篇已抓取文章（涉及 ${groups.size} 个区域），确认批量解析？将生成 AST 结构和批注。`,
-    onOk: async () => {
-      batchProcessing.value = true;
-      let totalSuccess = 0;
-      let totalFailed = 0;
-      const allFailures: { article_id: string; error: string }[] = [];
+    content: `已选择 ${selectedRows.length} 篇已抓取文章，确认批量解析？将生成 AST 结构和批注。`,
+    onOk: () => {
+      void runBatchTaskInModal(modalRef, async () => {
+        let totalSuccess = 0;
+        let totalFailed = 0;
+        const allFailures: { article_id: string; error: string }[] = [];
 
-      try {
-        // 按租户分组并行处理
-        const promises: Promise<void>[] = [];
-        for (const [tenantSchema, rows] of groups) {
-          promises.push(
-            (async () => {
-              try {
-                const result = await batchParseArticles({
-                  tenant_schema: tenantSchema,
-                  article_ids: rows.map((row) => row.id),
-                  reason: '批量解析',
-                });
-                totalSuccess += result.success_count;
-                totalFailed += result.failed_count;
-                if (result.failures?.length > 0) {
-                  allFailures.push(...result.failures);
-                }
-              } catch (error: any) {
-                totalFailed += rows.length;
-                allFailures.push(
-                  ...rows.map((row) => ({
-                    article_id: row.id,
-                    error: '批量解析请求失败',
-                  })),
-                );
-              }
-            })(),
-          );
+        const result = await batchParseArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.map((row) => row.id),
+          reason: '批量解析',
+        });
+        totalSuccess += result.success_count;
+        totalFailed += result.failed_count;
+        if (result.failures?.length > 0) {
+          allFailures.push(...result.failures);
         }
-        await Promise.all(promises);
 
-        // 统一消息提示逻辑
         if (totalSuccess > 0 && totalFailed > 0) {
-          message.warning(`批量解析完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
+          showBatchResult('warning', `批量解析完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
         } else if (totalSuccess > 0) {
-          message.success(`成功解析 ${totalSuccess} 篇文章`);
+          showBatchResult('success', `成功解析 ${totalSuccess} 篇文章`);
         } else if (totalFailed > 0) {
-          message.error(`批量解析失败：${totalFailed} 篇全部失败`);
+          showBatchResult('error', `批量解析失败：${totalFailed} 篇全部失败`);
         }
         if (allFailures.length > 0) {
-          // 展示详细失败原因
           const failureReasons = allFailures
             .map((f) => `${f.article_id?.slice(0, 8)}: ${f.error}`)
             .join('\n');
           message.warning(`部分文章解析失败:\n${failureReasons}`, 5);
         }
 
-        await clearSelectionAndReload();
-      } catch (error: any) {
-        // 错误提示由全局拦截器统一处理
-        console.error('[Content] batch parse failed', error);
-      } finally {
-        batchProcessing.value = false;
-      }
+        clearGridSelectionDeferred();
+        scheduleGridQuery();
+      });
+      return HOLD_CONFIRM_MODAL_OPEN;
     },
   });
 }
@@ -665,73 +666,63 @@ async function handleBatchParse() {
 // 批量发布
 async function handleBatchPublish() {
   if (!canBatchPublish.value || batchProcessing.value) return;
+  if (!selectedTenant.value) {
+    message.warning('请先选择所属区域');
+    return;
+  }
+  const tenantSchema = selectedTenant.value;
 
-  // 按租户分组
-  const groups = groupByTenant(selectedRows.value);
+  const selectedRows = getSelectedRowsSnapshot();
+  if (selectedRows.length === 0) {
+    message.warning('请先选择文章');
+    return;
+  }
 
-  Modal.confirm({
+  const mismatchCount = countStatusMismatch(selectedRows, 'parsed');
+  if (mismatchCount > 0) {
+    message.warning(`包含 ${mismatchCount} 篇非已解析状态文章`);
+    return;
+  }
+
+  let modalRef: ReturnType<typeof Modal.confirm> | null = null;
+  modalRef = Modal.confirm({
     title: '确认批量发布',
-    content: `已选择 ${selectedRows.value.length} 篇文章（涉及 ${groups.size} 个区域），确认批量发布？`,
-    onOk: async () => {
-      batchProcessing.value = true;
-      let totalSuccess = 0;
-      let totalFailed = 0;
-      const allFailures: { article_id: string; error: string }[] = [];
+    content: `已选择 ${selectedRows.length} 篇文章，确认批量发布？`,
+    onOk: () => {
+      void runBatchTaskInModal(modalRef, async () => {
+        let totalSuccess = 0;
+        let totalFailed = 0;
+        const allFailures: { article_id: string; error: string }[] = [];
 
-      try {
-        // 按租户分组并行处理
-        const promises: Promise<void>[] = [];
-        for (const [tenantSchema, rows] of groups) {
-          promises.push(
-            (async () => {
-              try {
-                const result = await batchPublishArticles({
-                  tenant_schema: tenantSchema,
-                  article_ids: rows.map((row) => row.id),
-                  reason: '批量发布',
-                });
-                totalSuccess += result.success_count;
-                totalFailed += result.failed_count;
-                if (result.failures?.length > 0) {
-                  allFailures.push(...result.failures);
-                }
-              } catch (error: any) {
-                totalFailed += rows.length;
-                allFailures.push(
-                  ...rows.map((row) => ({
-                    article_id: row.id,
-                    error: '批量发布请求失败',
-                  })),
-                );
-              }
-            })(),
-          );
+        const result = await batchPublishArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.map((row) => row.id),
+          reason: '批量发布',
+        });
+        totalSuccess += result.success_count;
+        totalFailed += result.failed_count;
+        if (result.failures?.length > 0) {
+          allFailures.push(...result.failures);
         }
-        await Promise.all(promises);
 
-        // 统一消息提示逻辑
         if (totalSuccess > 0 && totalFailed > 0) {
-          message.warning(`批量发布完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
+          showBatchResult('warning', `批量发布完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
         } else if (totalSuccess > 0) {
-          message.success(`成功发布 ${totalSuccess} 篇文章`);
+          showBatchResult('success', `成功发布 ${totalSuccess} 篇文章`);
         } else if (totalFailed > 0) {
-          message.error(`批量发布失败：${totalFailed} 篇全部失败`);
+          showBatchResult('error', `批量发布失败：${totalFailed} 篇全部失败`);
         }
         if (allFailures.length > 0) {
-          // 展示详细失败原因
           const failureReasons = allFailures
             .map((f) => `${f.article_id?.slice(0, 8)}: ${f.error}`)
             .join('\n');
           message.warning(`部分文章发布失败:\n${failureReasons}`, 5);
         }
 
-        await clearSelectionAndReload();
-      } catch (error: any) {
-        // 错误提示由全局拦截器统一处理
-        console.error('[Content] batch publish failed', error);
-      } finally {
-        batchProcessing.value = false;
-      }
+        clearGridSelectionDeferred();
+        scheduleGridQuery();
+      });
+      return HOLD_CONFIRM_MODAL_OPEN;
     },
   });
 }
@@ -739,74 +730,64 @@ async function handleBatchPublish() {
 // 批量归档
 async function handleBatchArchive() {
   if (!canBatchArchive.value || batchProcessing.value) return;
+  if (!selectedTenant.value) {
+    message.warning('请先选择所属区域');
+    return;
+  }
+  const tenantSchema = selectedTenant.value;
 
-  // 按租户分组
-  const groups = groupByTenant(selectedRows.value);
+  const selectedRows = getSelectedRowsSnapshot();
+  if (selectedRows.length === 0) {
+    message.warning('请先选择文章');
+    return;
+  }
 
-  Modal.confirm({
+  const mismatchCount = countStatusMismatch(selectedRows, 'published');
+  if (mismatchCount > 0) {
+    message.warning(`包含 ${mismatchCount} 篇非已发布状态文章`);
+    return;
+  }
+
+  let modalRef: ReturnType<typeof Modal.confirm> | null = null;
+  modalRef = Modal.confirm({
     title: '确认批量归档',
-    content: `已选择 ${selectedRows.value.length} 篇已发布文章（涉及 ${groups.size} 个区域），确认批量归档？`,
+    content: `已选择 ${selectedRows.length} 篇已发布文章，确认批量归档？`,
     okType: 'danger',
-    onOk: async () => {
-      batchProcessing.value = true;
-      let totalSuccess = 0;
-      let totalFailed = 0;
-      const allFailures: { article_id: string; error: string }[] = [];
+    onOk: () => {
+      void runBatchTaskInModal(modalRef, async () => {
+        let totalSuccess = 0;
+        let totalFailed = 0;
+        const allFailures: { article_id: string; error: string }[] = [];
 
-      try {
-        // 按租户分组并行处理
-        const promises: Promise<void>[] = [];
-        for (const [tenantSchema, rows] of groups) {
-          promises.push(
-            (async () => {
-              try {
-                const result = await batchArchiveArticles({
-                  tenant_schema: tenantSchema,
-                  article_ids: rows.map((row) => row.id),
-                  reason: '批量归档',
-                });
-                totalSuccess += result.success_count;
-                totalFailed += result.failed_count;
-                if (result.failures?.length > 0) {
-                  allFailures.push(...result.failures);
-                }
-              } catch (error: any) {
-                totalFailed += rows.length;
-                allFailures.push(
-                  ...rows.map((row) => ({
-                    article_id: row.id,
-                    error: '批量归档请求失败',
-                  })),
-                );
-              }
-            })(),
-          );
+        const result = await batchArchiveArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.map((row) => row.id),
+          reason: '批量归档',
+        });
+        totalSuccess += result.success_count;
+        totalFailed += result.failed_count;
+        if (result.failures?.length > 0) {
+          allFailures.push(...result.failures);
         }
-        await Promise.all(promises);
 
-        // 统一消息提示逻辑
         if (totalSuccess > 0 && totalFailed > 0) {
-          message.warning(`批量归档完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
+          showBatchResult('warning', `批量归档完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
         } else if (totalSuccess > 0) {
-          message.success(`成功归档 ${totalSuccess} 篇文章`);
+          showBatchResult('success', `成功归档 ${totalSuccess} 篇文章`);
         } else if (totalFailed > 0) {
-          message.error(`批量归档失败：${totalFailed} 篇全部失败`);
+          showBatchResult('error', `批量归档失败：${totalFailed} 篇全部失败`);
         }
         if (allFailures.length > 0) {
-          // 展示详细失败原因
           const failureReasons = allFailures
             .map((f) => `${f.article_id?.slice(0, 8)}: ${f.error}`)
             .join('\n');
           message.warning(`部分文章归档失败:\n${failureReasons}`, 5);
         }
 
-        await clearSelectionAndReload();
-      } catch (error: any) {
-        // 错误提示由全局拦截器统一处理
-        console.error('[Content] batch archive failed', error);
-      } finally {
-        batchProcessing.value = false;
-      }
+        clearGridSelectionDeferred();
+        scheduleGridQuery();
+      });
+      return HOLD_CONFIRM_MODAL_OPEN;
     },
   });
 }
@@ -814,73 +795,63 @@ async function handleBatchArchive() {
 // 批量恢复
 async function handleBatchRestore() {
   if (!canBatchRestore.value || batchProcessing.value) return;
+  if (!selectedTenant.value) {
+    message.warning('请先选择所属区域');
+    return;
+  }
+  const tenantSchema = selectedTenant.value;
 
-  // 按租户分组
-  const groups = groupByTenant(selectedRows.value);
+  const selectedRows = getSelectedRowsSnapshot();
+  if (selectedRows.length === 0) {
+    message.warning('请先选择文章');
+    return;
+  }
 
-  Modal.confirm({
+  const mismatchCount = countStatusMismatch(selectedRows, 'archived');
+  if (mismatchCount > 0) {
+    message.warning(`包含 ${mismatchCount} 篇非已归档状态文章`);
+    return;
+  }
+
+  let modalRef: ReturnType<typeof Modal.confirm> | null = null;
+  modalRef = Modal.confirm({
     title: '确认批量恢复',
-    content: `已选择 ${selectedRows.value.length} 篇已归档文章（涉及 ${groups.size} 个区域），确认批量恢复为已发布状态？`,
-    onOk: async () => {
-      batchProcessing.value = true;
-      let totalSuccess = 0;
-      let totalFailed = 0;
-      const allFailures: { article_id: string; error: string }[] = [];
+    content: `已选择 ${selectedRows.length} 篇已归档文章，确认批量恢复为已发布状态？`,
+    onOk: () => {
+      void runBatchTaskInModal(modalRef, async () => {
+        let totalSuccess = 0;
+        let totalFailed = 0;
+        const allFailures: { article_id: string; error: string }[] = [];
 
-      try {
-        // 按租户分组并行处理
-        const promises: Promise<void>[] = [];
-        for (const [tenantSchema, rows] of groups) {
-          promises.push(
-            (async () => {
-              try {
-                const result = await batchRestoreArticles({
-                  tenant_schema: tenantSchema,
-                  article_ids: rows.map((row) => row.id),
-                  reason: '批量恢复',
-                });
-                totalSuccess += result.success_count;
-                totalFailed += result.failed_count;
-                if (result.failures?.length > 0) {
-                  allFailures.push(...result.failures);
-                }
-              } catch (error: any) {
-                totalFailed += rows.length;
-                allFailures.push(
-                  ...rows.map((row) => ({
-                    article_id: row.id,
-                    error: '批量恢复请求失败',
-                  })),
-                );
-              }
-            })(),
-          );
+        const result = await batchRestoreArticles({
+          tenant_schema: tenantSchema,
+          article_ids: selectedRows.map((row) => row.id),
+          reason: '批量恢复',
+        });
+        totalSuccess += result.success_count;
+        totalFailed += result.failed_count;
+        if (result.failures?.length > 0) {
+          allFailures.push(...result.failures);
         }
-        await Promise.all(promises);
 
-        // 统一消息提示逻辑
         if (totalSuccess > 0 && totalFailed > 0) {
-          message.warning(`批量恢复完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
+          showBatchResult('warning', `批量恢复完成：成功 ${totalSuccess} 篇，失败 ${totalFailed} 篇`);
         } else if (totalSuccess > 0) {
-          message.success(`成功恢复 ${totalSuccess} 篇文章`);
+          showBatchResult('success', `成功恢复 ${totalSuccess} 篇文章`);
         } else if (totalFailed > 0) {
-          message.error(`批量恢复失败：${totalFailed} 篇全部失败`);
+          showBatchResult('error', `批量恢复失败：${totalFailed} 篇全部失败`);
         }
         if (allFailures.length > 0) {
-          // 展示详细失败原因
           const failureReasons = allFailures
             .map((f) => `${f.article_id?.slice(0, 8)}: ${f.error}`)
             .join('\n');
           message.warning(`部分文章恢复失败:\n${failureReasons}`, 5);
         }
 
-        await clearSelectionAndReload();
-      } catch (error: any) {
-        // 错误提示由全局拦截器统一处理
-        console.error('[Content] batch restore failed', error);
-      } finally {
-        batchProcessing.value = false;
-      }
+        clearGridSelectionDeferred();
+        scheduleGridQuery();
+      });
+      return HOLD_CONFIRM_MODAL_OPEN;
     },
   });
 }
@@ -959,10 +930,7 @@ async function handleBatchRestore() {
 
           <!-- 批量操作按钮 -->
           <div class="flex items-center gap-2">
-            <span v-if="selectedRows.length > 0" class="text-sm font-medium text-primary">
-              已选择 {{ selectedRows.length }} 项
-            </span>
-            <span v-else class="text-sm text-gray-400">
+            <span class="text-sm text-gray-400">
               批量操作
             </span>
             <Tooltip :title="canBatchParse ? '将已抓取文章解析为 AST' : batchParseDisabledReason">
