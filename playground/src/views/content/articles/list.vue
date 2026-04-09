@@ -452,7 +452,7 @@ function runBatchTaskInModal(
       setTimeout(() => {
         clearGridSelectionDeferred();
         scheduleGridQuery();
-      }, 150);
+      }, 32);
     })
     .catch((error) => {
       modalRef?.update({
