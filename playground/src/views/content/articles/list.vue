@@ -402,14 +402,28 @@ function showBatchResult(type: 'error' | 'success' | 'warning', content: string,
   });
 }
 
-function flushPendingBatchResult() {
-  if (!pendingBatchResult) return;
+function runAfterMessageMounted(callback: () => void) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      callback();
+    });
+  });
+}
+
+function flushPendingBatchResult(onMounted?: () => void) {
+  if (!pendingBatchResult) {
+    onMounted?.();
+    return;
+  }
   const result = pendingBatchResult;
   pendingBatchResult = null;
   message.open({
     type: result.type,
     content: result.content,
     duration: result.duration,
+  });
+  runAfterMessageMounted(() => {
+    onMounted?.();
   });
 }
 
@@ -448,11 +462,10 @@ function runBatchTaskInModal(
     })
     .then(() => {
       modalRef?.destroy();
-      flushPendingBatchResult();
-      setTimeout(() => {
+      flushPendingBatchResult(() => {
         clearGridSelectionDeferred();
         scheduleGridQuery();
-      }, 32);
+      });
     })
     .catch((error) => {
       modalRef?.update({
