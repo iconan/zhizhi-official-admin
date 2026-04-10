@@ -2,8 +2,7 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Modal, Select, Tag, Tooltip, message } from 'ant-design-vue';
-import type { SelectValue } from 'ant-design-vue/es/select';
+import { Modal, Tag, Tooltip, message } from 'ant-design-vue';
 import { Copy, RefreshCw } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
@@ -162,7 +161,6 @@ const tenantMap = ref<Record<string, IamTenant>>({});
 const selectedTenant = ref<string>();
 const loadingTenants = ref(false);
 type SelectedArticleRow = Pick<ArticleListItem, 'id' | 'tenant_schema' | 'status'>;
-let tenantQueryFrame: number | null = null;
 let deferredClearTimer: ReturnType<typeof setTimeout> | null = null;
 let latestQueryToken = 0;
 const HOLD_CONFIRM_MODAL_OPEN: Promise<never> = new Promise(() => {});
@@ -242,7 +240,10 @@ const [Grid, gridApi] = useVbenVxeGrid({
           const limit = page?.pageSize || 20;
           const offset = ((page?.currentPage || 1) - 1) * limit;
           const dateRange = formValues?.date_range;
+          const tenantSchema = formValues?.tenant_schema || undefined;
+          selectedTenant.value = tenantSchema;
           const queryParams = {
+            tenant_schema: tenantSchema,
             status: formValues?.status || undefined,
             source_name: formValues?.source_name || undefined,
             keyword: formValues?.keyword || undefined,
@@ -270,7 +271,6 @@ const [Grid, gridApi] = useVbenVxeGrid({
     checkboxConfig: {
       highlight: true,
       range: true,
-      checkMethod: () => Boolean(selectedTenant.value),
       // 优化：使用默认触发方式，减少不必要的更新
       trigger: 'default',
       // 优化：启用虚拟滚动时保持选中状态
@@ -298,6 +298,18 @@ const [Grid, gridApi] = useVbenVxeGrid({
             { label: '已发布', value: 'published' },
             { label: '已归档', value: 'archived' },
           ],
+          style: { width: '100%' },
+        },
+      },
+      {
+        component: 'Select',
+        fieldName: 'tenant_schema',
+        label: '所属区域',
+        componentProps: {
+          allowClear: true,
+          options: tenantOptions,
+          showSearch: true,
+          optionFilterProp: 'label',
           style: { width: '100%' },
         },
       },
@@ -338,10 +350,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  if (tenantQueryFrame !== null) {
-    cancelAnimationFrame(tenantQueryFrame);
-    tenantQueryFrame = null;
-  }
   if (deferredClearTimer !== null) {
     clearTimeout(deferredClearTimer);
     deferredClearTimer = null;
@@ -349,6 +357,7 @@ onBeforeUnmount(() => {
 });
 
 async function loadArticleList(queryParams: {
+  tenant_schema?: string;
   status?: ArticleStatus;
   source_name?: string;
   keyword?: string;
@@ -357,13 +366,14 @@ async function loadArticleList(queryParams: {
   limit: number;
   offset: number;
 }) {
-  if (!selectedTenant.value) {
-    return await fetchArticlesAggregate(queryParams);
+  const { tenant_schema, ...restQueryParams } = queryParams;
+  if (!tenant_schema) {
+    return await fetchArticlesAggregate(restQueryParams);
   }
 
   return await fetchArticles({
-    tenant_schema: selectedTenant.value,
-    ...queryParams,
+    tenant_schema,
+    ...restQueryParams,
   });
 }
 
@@ -427,20 +437,25 @@ function flushPendingBatchResult(onMounted?: () => void) {
   });
 }
 
+function getLatestGridQueryParams() {
+  const latestValues = gridApi.formApi?.getLatestSubmissionValues?.();
+  return latestValues && typeof latestValues === 'object' ? latestValues : {};
+}
+
 function scheduleGridQuery() {
-  void gridApi.query();
+  void gridApi.query(getLatestGridQueryParams());
 }
 
 function handleToolbarRefresh() {
   scheduleGridQuery();
 }
 
-function runBatchTaskInModal(
+async function runBatchTaskInModal(
   modalRef: { destroy: () => void; update: (config: Record<string, any>) => void } | null,
   task: () => Promise<void>,
 ) {
   if (batchProcessing.value) {
-    return Promise.resolve();
+    return;
   }
   modalRef?.update({
     okText: '批量执行中',
@@ -452,41 +467,32 @@ function runBatchTaskInModal(
     },
   });
 
-  return Promise.resolve()
-    .then(async () => {
-      await new Promise<void>((resolve) => {
-        setTimeout(() => resolve(), 0);
-      });
-      batchProcessing.value = true;
-      await task();
-    })
-    .then(() => {
-      modalRef?.destroy();
-      flushPendingBatchResult(() => {
-        clearGridSelectionDeferred();
-        scheduleGridQuery();
-      });
-    })
-    .catch((error) => {
-      modalRef?.update({
-        okText: '确定',
-        okButtonProps: {
-          loading: false,
-        },
-        cancelButtonProps: {
-          disabled: false,
-        },
-      });
-      return Promise.reject(error);
-    })
-    .finally(() => {
-      batchProcessing.value = false;
+  try {
+    await new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), 0);
     });
-}
+    batchProcessing.value = true;
+    await task();
 
-async function clearSelectionAndReload() {
-  await gridApi.query();
-  clearGridSelectionDeferred();
+    modalRef?.destroy();
+    flushPendingBatchResult(() => {
+      clearGridSelectionDeferred();
+      scheduleGridQuery();
+    });
+  } catch (error) {
+    modalRef?.update({
+      okText: '确定',
+      okButtonProps: {
+        loading: false,
+      },
+      cancelButtonProps: {
+        disabled: false,
+      },
+    });
+    throw error;
+  } finally {
+    batchProcessing.value = false;
+  }
 }
 
 async function loadSources() {
@@ -592,22 +598,6 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleLi
     // 错误提示由全局拦截器统一处理
     console.error('[Content] action failed', error);
   }
-}
-
-function handleTenantChange(value: SelectValue) {
-  selectedTenant.value = (value as string) || undefined;
-
-  if (tenantQueryFrame !== null) {
-    cancelAnimationFrame(tenantQueryFrame);
-  }
-
-  tenantQueryFrame = requestAnimationFrame(async () => {
-    try {
-      await clearSelectionAndReload();
-    } finally {
-      tenantQueryFrame = null;
-    }
-  });
 }
 
 function getSelectedRowsSnapshot(): SelectedArticleRow[] {
@@ -956,25 +946,6 @@ async function handleBatchRestore() {
     <Grid ref="gridRef" table-title="文章管理">
       <template #toolbar-tools>
         <div class="flex items-center gap-4">
-          <!-- 区域选择 -->
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-500">所属区域:</span>
-            <Select
-              v-model:value="selectedTenant"
-              :loading="loadingTenants"
-              :options="tenantOptions"
-              allow-clear
-              placeholder="选择所属区域"
-              show-search
-              option-filter-prop="label"
-              style="width: 280px"
-              @change="handleTenantChange"
-            />
-          </div>
-
-          <!-- 分隔线 -->
-          <div class="h-6 w-px bg-gray-300"></div>
-
           <!-- 批量操作按钮 -->
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-400">
