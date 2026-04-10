@@ -279,6 +279,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
   },
   formOptions: {
     submitOnChange: true,
+    submitOnChangeDelay: 0,
     schema: [
       {
         component: 'Input',
