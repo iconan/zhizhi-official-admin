@@ -431,6 +431,12 @@ export interface VbenFormProps<
    * @default false
    */
   submitOnEnter?: boolean;
+
+  /**
+   * 字段值改变时提交表单的防抖延迟（毫秒）
+   * @default 300
+   */
+  submitOnChangeDelay?: number;
 }
 
 export type ExtendedFormApi = FormApi & {
