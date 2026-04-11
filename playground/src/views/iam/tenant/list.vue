@@ -442,7 +442,7 @@ async function doUpdateStatus(
       </template>
     </EditDrawer>
 
-    <Grid table-title="租户列表">
+    <Grid table-title="区域列表">
       <template #toolbar-tools>
         <Button type="primary" @click="openCreateDrawer">新增租户</Button>
       </template>
