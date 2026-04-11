@@ -56,12 +56,6 @@ const columns: VxeTableGridOptions['columns'] = [
     width: 60,
     fixed: 'left',
   },
-  {
-    field: 'id',
-    title: '文章 ID',
-    minWidth: 120,
-    slots: { default: 'article-id' },
-  },
   { field: 'title', title: '标题', minWidth: 200, showOverflow: 'tooltip' },
   {
     field: 'tenant_schema',
@@ -94,6 +88,12 @@ const columns: VxeTableGridOptions['columns'] = [
   { field: 'issue_info', title: '期号信息', minWidth: 150, showOverflow: 'tooltip' },
   { field: 'created_at', title: '创建时间', minWidth: 150 },
   { field: 'updated_at', title: '更新时间', minWidth: 150 },
+  {
+    field: 'id',
+    title: '文章 ID',
+    minWidth: 120,
+    slots: { default: 'article-id' },
+  },
   {
     title: '操作',
     field: 'operation',
