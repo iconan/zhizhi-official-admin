@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useUserStore } from '@vben/stores';
 import { Card, Descriptions, Tag, Avatar, Space, Typography } from 'ant-design-vue';
 import {
@@ -9,7 +9,10 @@ import {
   Users,
 } from 'lucide-vue-next';
 
+import { fetchRoles } from '#/api/iam/role';
+
 const userStore = useUserStore();
+const roleMap = ref<Record<string, string>>({});
 
 const userInfo = computed(() => {
   return {
@@ -18,6 +21,28 @@ const userInfo = computed(() => {
     roles: userStore.userInfo?.roles || [],
     permissions: userStore.userInfo?.permissions?.length || 0,
   };
+});
+
+const displayRoles = computed(() => {
+  return userInfo.value.roles.map((code: string) => ({
+    code,
+    name: roleMap.value[code] || code,
+  }));
+});
+
+async function loadRoles() {
+  try {
+    const { items } = await fetchRoles({ limit: 200 });
+    items.forEach((role) => {
+      roleMap.value[role.code] = role.name;
+    });
+  } catch {
+    // 静默失败，回退到显示编码
+  }
+}
+
+onMounted(() => {
+  loadRoles();
 });
 
 const welcomeMessage = computed(() => {
@@ -63,10 +88,10 @@ const welcomeMessage = computed(() => {
         <Descriptions.Item label="角色">
           <Space>
             <Users :size="16" />
-            <Tag v-for="role in userInfo.roles" :key="role" color="blue">
-              {{ role }}
+            <Tag v-for="role in displayRoles" :key="role.code" color="blue">
+              {{ role.name }}
             </Tag>
-            <span v-if="!userInfo.roles.length" class="text-gray-400">暂无角色</span>
+            <span v-if="!displayRoles.length" class="text-gray-400">暂无角色</span>
           </Space>
         </Descriptions.Item>
 
