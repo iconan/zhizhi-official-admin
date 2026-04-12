@@ -7,12 +7,18 @@ import {
   Mail,
   Shield,
   Users,
+  Building2,
 } from 'lucide-vue-next';
 
 import { fetchRoles } from '#/api/iam/role';
+import { fetchOrgs } from '#/api/iam/org';
 
 const userStore = useUserStore();
 const roleMap = ref<Record<string, string>>({});
+const orgMap = ref<Record<string, string>>({});
+
+// 超级管理员角色编码
+const SUPER_ADMIN_CODE = 'super_admin';
 
 const userInfo = computed(() => {
   return {
@@ -20,11 +26,26 @@ const userInfo = computed(() => {
     email: userStore.userInfo?.email || '-',
     roles: userStore.userInfo?.roles || [],
     permissions: userStore.userInfo?.permissions?.length || 0,
+    orgId: userStore.userInfo?.org_id || null,
   };
 });
 
+const orgName = computed(() => {
+  if (!userInfo.value.orgId) return '-';
+  return orgMap.value[userInfo.value.orgId] || userInfo.value.orgId;
+});
+
 const displayRoles = computed(() => {
-  return userInfo.value.roles.map((code: string) => ({
+  const roles = userInfo.value.roles;
+  // 如果包含超级管理员，则只显示超级管理员
+  if (roles.includes(SUPER_ADMIN_CODE)) {
+    return [{
+      code: SUPER_ADMIN_CODE,
+      name: roleMap.value[SUPER_ADMIN_CODE] || '超级管理员',
+    }];
+  }
+  // 否则显示所有角色
+  return roles.map((code: string) => ({
     code,
     name: roleMap.value[code] || code,
   }));
@@ -41,8 +62,20 @@ async function loadRoles() {
   }
 }
 
+async function loadOrgs() {
+  try {
+    const items = await fetchOrgs({ limit: 200 });
+    items.forEach((org: any) => {
+      orgMap.value[org.org_id] = org.name;
+    });
+  } catch {
+    // 静默失败，回退到显示ID
+  }
+}
+
 onMounted(() => {
   loadRoles();
+  loadOrgs();
 });
 
 const welcomeMessage = computed(() => {
@@ -82,6 +115,13 @@ const welcomeMessage = computed(() => {
           <Space>
             <Mail :size="16" />
             {{ userInfo.email }}
+          </Space>
+        </Descriptions.Item>
+
+        <Descriptions.Item label="所属组织">
+          <Space>
+            <Building2 :size="16" />
+            {{ orgName }}
           </Space>
         </Descriptions.Item>
 

@@ -14,7 +14,6 @@ import {
   replayEmbedding,
   replayJob,
   resumeJob,
-  type AlertLevel,
   type JobItem,
   type JobStatus,
   type MetricsSummary,
@@ -53,12 +52,6 @@ const statusColorMap: Record<string, string> = {
   queued: 'processing',
   started: 'blue',
   stopped: 'warning',
-};
-
-const alertColorMap: Record<AlertLevel, string> = {
-  critical: 'error',
-  normal: 'default',
-  warning: 'warning',
 };
 
 const alertLabelMap: Record<string, string> = {
@@ -500,7 +493,14 @@ onBeforeUnmount(() => {
         </Tag>
       </template>
       <template #alertLevel="{ row }">
-        <Tag v-if="row.alert_level" :color="alertColorMap[row.alert_level as AlertLevel]">
+        <Tag
+          v-if="row.alert_level"
+          :class="{
+            'bg-green-500 text-white border-green-500': row.alert_level === 'normal',
+            'bg-yellow-500 text-white border-yellow-500': row.alert_level === 'warning',
+            'bg-red-500 text-white border-red-500': row.alert_level === 'critical',
+          }"
+        >
           {{ alertLabelMap[row.alert_level] || row.alert_level }}
         </Tag>
         <span v-else>--</span>
