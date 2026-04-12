@@ -19,6 +19,7 @@ import {
   type JobStatus,
   type MetricsSummary,
 } from '#/api/etl/jobs';
+import { fetchWebSources, type EtlWebSourceItem } from '#/api/etl/sources';
 import { fetchTenants, type IamTenant } from '#/api/iam/tenant';
 
 import CreateDrawer from './modules/create-drawer.vue';
@@ -27,6 +28,7 @@ const POLL_INTERVAL = 10_000;
 const metrics = ref<MetricsSummary | null>(null);
 const tenantMap = ref<Record<string, IamTenant>>({});
 const tenantOptions = ref<{ label: string; value: string }[]>([]);
+const sourceMap = ref<Record<string, string>>({});
 let pollTimer: null | ReturnType<typeof setInterval> = null;
 const [CreateDrawerView, createDrawerApi] = useVbenDrawer({
   connectedComponent: CreateDrawer,
@@ -57,6 +59,12 @@ const alertColorMap: Record<AlertLevel, string> = {
   critical: 'error',
   normal: 'default',
   warning: 'warning',
+};
+
+const alertLabelMap: Record<string, string> = {
+  critical: '严重',
+  normal: '正常',
+  warning: '告警',
 };
 
 function formatPercent(value?: number) {
@@ -99,7 +107,8 @@ const columns: VxeTableGridOptions['columns'] = [
     title: '来源名称',
     minWidth: 140,
     formatter: ({ cellValue }: { cellValue?: string }) => {
-      return cellValue || '--';
+      const displayName = sourceMap.value[cellValue ?? ''];
+      return displayName || cellValue || '--';
     },
   },
   { field: 'chunk_size', title: '分块大小', width: 100 },
@@ -311,6 +320,21 @@ const [Grid, gridApi] = useVbenVxeGrid({
   },
 });
 
+async function loadSources() {
+  try {
+    const { items } = await fetchWebSources();
+    sourceMap.value = items.reduce(
+      (acc, item: EtlWebSourceItem) => {
+        acc[item.key] = item.display_name;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+  } catch (error) {
+    console.error('[ETK] load sources failed', error);
+  }
+}
+
 async function loadTenants() {
   try {
     const { items } = await fetchTenants({
@@ -429,7 +453,7 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<JobItem>>
 
 onMounted(async () => {
   await nextTick();
-  await loadTenants();
+  await Promise.all([loadSources(), loadTenants()]);
   await refreshAll();
   startPolling();
   document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -477,7 +501,7 @@ onBeforeUnmount(() => {
       </template>
       <template #alertLevel="{ row }">
         <Tag v-if="row.alert_level" :color="alertColorMap[row.alert_level as AlertLevel]">
-          {{ row.alert_level }}
+          {{ alertLabelMap[row.alert_level] || row.alert_level }}
         </Tag>
         <span v-else>--</span>
       </template>
