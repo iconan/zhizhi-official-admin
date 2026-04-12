@@ -6,6 +6,8 @@ import { nextTick, onMounted, ref } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
+import type { SelectProps } from 'ant-design-vue';
+
 import { Button, message, Modal, Tag } from 'ant-design-vue';
 
 import { useVbenForm, z } from '#/adapter/form';
@@ -16,9 +18,35 @@ import {
   fetchRules,
   updateRule,
 } from '#/api/etl/rules';
+import { fetchTenants } from '#/api/iam/tenant';
 
 const [RuleDrawer, ruleDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 const currentRule = ref<RuleItem | null>(null);
+
+// 租户下拉选项
+const tenantOptions = ref<SelectProps['options']>([]);
+const loadingTenants = ref(false);
+
+async function loadTenantOptions() {
+  loadingTenants.value = true;
+  try {
+    const { items } = await fetchTenants({
+      limit: 200,
+      offset: 0,
+      status: 'active',
+    });
+    tenantOptions.value = items
+      .filter((item) => item.schema_name)
+      .map((item) => ({
+        label: `${item.name} · ${item.schema_name}`,
+        value: item.schema_name,
+      }));
+  } catch (error) {
+    console.error('[ETL Rules] load tenants failed', error);
+  } finally {
+    loadingTenants.value = false;
+  }
+}
 
 function parseLineValues(value?: string) {
   return (value || '')
@@ -41,7 +69,10 @@ function normalizeRulePayload(values: Record<string, any>): RuleInput {
     name: values.name,
     priority: Number(values.priority || 100),
     rollout_percent: Number(values.rollout_percent || 100),
-    rollout_tenant_schemas: parseLineValues(values.rollout_tenant_schemas),
+    // 灰度租户现在是多选Select，直接传递数组
+    rollout_tenant_schemas: Array.isArray(values.rollout_tenant_schemas)
+      ? values.rollout_tenant_schemas
+      : [],
     source_selectors: parseLineValues(values.source_selectors),
     title_selectors: parseLineValues(values.title_selectors),
     version: Number(values.version || 1),
@@ -55,6 +86,7 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'name',
       label: '规则名称',
+      componentProps: { class: 'w-full' },
       rules: z
         .string({ required_error: '请输入规则名称' })
         .min(1, '请输入规则名称')
@@ -64,6 +96,7 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'host_pattern',
       label: 'Host 匹配规则',
+      componentProps: { class: 'w-full' },
       rules: z
         .string({ required_error: '请输入 Host 匹配规则' })
         .min(1, '请输入 Host 匹配规则')
@@ -73,42 +106,42 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       component: 'Textarea',
       fieldName: 'title_selectors',
       label: '标题选择器',
-      componentProps: { rows: 3 },
+      componentProps: { class: 'w-full', rows: 3 },
       rules: z.string().optional(),
     },
     {
       component: 'Textarea',
       fieldName: 'content_selectors',
       label: '正文选择器',
-      componentProps: { rows: 3 },
+      componentProps: { class: 'w-full', rows: 3 },
       rules: z.string().optional(),
     },
     {
       component: 'Textarea',
       fieldName: 'date_selectors',
       label: '日期选择器',
-      componentProps: { rows: 3 },
+      componentProps: { class: 'w-full', rows: 3 },
       rules: z.string().optional(),
     },
     {
       component: 'Textarea',
       fieldName: 'source_selectors',
       label: '来源选择器',
-      componentProps: { rows: 3 },
+      componentProps: { class: 'w-full', rows: 3 },
       rules: z.string().optional(),
     },
     {
       component: 'Textarea',
       fieldName: 'author_selectors',
       label: '作者选择器',
-      componentProps: { rows: 3 },
+      componentProps: { class: 'w-full', rows: 3 },
       rules: z.string().optional(),
     },
     {
       component: 'Input',
       fieldName: 'priority',
       label: '优先级',
-      componentProps: { type: 'number' },
+      componentProps: { class: 'w-full', type: 'number' },
       rules: z.coerce.number().min(0, '不能小于 0').max(9999, '过大'),
     },
     {
@@ -117,6 +150,7 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       label: '启用状态',
       defaultValue: true,
       componentProps: {
+        class: 'w-full',
         options: [
           { label: '启用', value: true },
           { label: '停用', value: false },
@@ -128,21 +162,30 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'version',
       label: '版本号',
-      componentProps: { type: 'number' },
+      componentProps: { class: 'w-full', type: 'number' },
       rules: z.coerce.number().min(1, '最小为 1').max(999, '过大'),
     },
     {
-      component: 'Textarea',
+      component: 'Select',
       fieldName: 'rollout_tenant_schemas',
-      label: '灰度租户',
-      componentProps: { rows: 3 },
-      rules: z.string().optional(),
+      label: '灰度租户（区域）',
+      defaultValue: [],
+      componentProps: {
+        allowClear: true,
+        class: 'w-full',
+        loading: loadingTenants,
+        mode: 'multiple',
+        options: tenantOptions,
+        placeholder: '请选择灰度生效的租户（空表示全量）',
+        showSearch: true,
+        optionFilterProp: 'label',
+      },
     },
     {
       component: 'Input',
       fieldName: 'rollout_percent',
       label: '灰度百分比',
-      componentProps: { type: 'number' },
+      componentProps: { class: 'w-full', type: 'number' },
       rules: z.coerce.number().min(1, '最小为 1').max(100, '最大为 100'),
     },
     {
@@ -150,6 +193,7 @@ const [RuleForm, ruleFormApi] = useVbenForm({
       fieldName: 'name_preview',
       label: '填写说明',
       componentProps: {
+        class: 'w-full',
         disabled: true,
         placeholder: '选择器字段支持每行一个值',
       },
@@ -215,11 +259,13 @@ const [Grid, gridApi] = useVbenVxeGrid({
   } as VxeTableGridOptions,
 });
 
-function onCreate() {
+async function onCreate() {
+  await loadTenantOptions();
   openForm();
 }
 
-function openForm(row?: RuleItem) {
+async function openForm(row?: RuleItem) {
+  await loadTenantOptions();
   currentRule.value = row ?? null;
   ruleDrawerApi.open();
   nextTick(() => {
@@ -230,6 +276,7 @@ function openForm(row?: RuleItem) {
         enabled: true,
         priority: 100,
         rollout_percent: 100,
+        rollout_tenant_schemas: [],
         version: 1,
       });
     } else {
@@ -243,7 +290,10 @@ function openForm(row?: RuleItem) {
         name: row.name,
         priority: row.priority ?? 100,
         rollout_percent: row.rollout_percent ?? 100,
-        rollout_tenant_schemas: toTextValue(row.rollout_tenant_schemas),
+        // 灰度租户现在是数组，直接传递
+        rollout_tenant_schemas: Array.isArray(row.rollout_tenant_schemas)
+          ? row.rollout_tenant_schemas
+          : [],
         source_selectors: toTextValue(row.source_selectors),
         title_selectors: toTextValue(row.title_selectors),
         version: row.version ?? 1,
@@ -287,7 +337,7 @@ function onActionClick({ code, row }: Parameters<OnActionClickFn<RuleItem>>[0]) 
       break;
     }
     case 'edit': {
-      openForm(row);
+      void openForm(row);
       break;
     }
     default: {

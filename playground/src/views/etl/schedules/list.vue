@@ -127,6 +127,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'name',
       label: '调度名称',
+      componentProps: { class: 'w-full' },
       rules: z.string({ required_error: '请输入名称' }).min(1, '请输入名称').max(200, '过长'),
     },
     {
@@ -136,12 +137,12 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       defaultValue: null,
       componentProps: {
         allowClear: true,
+        class: 'w-full',
         loading: loadingTenants,
         options: tenantOptions,
         placeholder: '请选择所属区域',
         showSearch: true,
         optionFilterProp: 'label',
-        style: { minWidth: '200px' },
       },
       rules: z.string({ required_error: '请选择所属区域' }).min(1, '请选择所属区域'),
     },
@@ -151,11 +152,11 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       label: '来源名称',
       componentProps: {
         allowClear: false,
+        class: 'w-full',
         dropdownMatchSelectWidth: false,
         loading: loadingSources,
         options: sourceOptions,
         placeholder: '请选择来源名称',
-        style: { minWidth: '200px' },
       },
       rules: z.string({ required_error: '请选择来源名称' }).min(1, '请选择来源名称'),
     },
@@ -163,14 +164,14 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       component: 'Textarea',
       fieldName: 'seed_urls_text',
       label: '起始 URL 列表',
-      componentProps: { rows: 4 },
+      componentProps: { class: 'w-full', rows: 4 },
       rules: z.string({ required_error: '请至少输入一条起始 URL' }).min(1, '请至少输入一条起始 URL'),
     },
     {
       component: 'Input',
       fieldName: 'chunk_size',
       label: '分块大小',
-      componentProps: { type: 'number' },
+      componentProps: { class: 'w-full', type: 'number' },
       rules: z.coerce.number().min(80, '最小为 80').max(1200, '最大为 1200'),
     },
     {
@@ -179,8 +180,8 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       label: '提取策略',
       defaultValue: 'hybrid',
       componentProps: {
+        class: 'w-full',
         options: extractorStrategyOptions,
-        style: { minWidth: '200px' },
       },
       rules: z.string({ required_error: '请选择提取策略' }),
     },
@@ -188,7 +189,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'interval_minutes',
       label: '执行间隔（分钟）',
-      componentProps: { type: 'number' },
+      componentProps: { class: 'w-full', type: 'number' },
       rules: z.coerce.number().min(1, '最小为 1').max(10080, '过大'),
     },
     {
@@ -197,11 +198,11 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       label: '启用状态',
       defaultValue: true,
       componentProps: {
+        class: 'w-full',
         options: [
           { label: '启用', value: true },
           { label: '停用', value: false },
         ],
-        style: { minWidth: '200px' },
       },
       rules: z.boolean(),
     },
@@ -209,7 +210,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       component: 'Input',
       fieldName: 'tip',
       label: '填写说明',
-      componentProps: { disabled: true, placeholder: 'seed_urls 支持每行一个 URL，run/trigger-due 后可回到任务列表观察' },
+      componentProps: { class: 'w-full', disabled: true, placeholder: 'seed_urls 支持每行一个 URL，run/trigger-due 后可回到任务列表观察' },
       dependencies: {
         show: () => false,
         triggerFields: ['name'],
