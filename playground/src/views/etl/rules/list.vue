@@ -2,9 +2,9 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 import type { RuleInput, RuleItem } from '#/api/etl/rules';
 
-import { nextTick, onMounted } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 
-import { Page } from '@vben/common-ui';
+import { Page, useVbenDrawer } from '@vben/common-ui';
 
 import { Button, message, Modal, Tag } from 'ant-design-vue';
 
@@ -16,6 +16,9 @@ import {
   fetchRules,
   updateRule,
 } from '#/api/etl/rules';
+
+const [RuleDrawer, ruleDrawerApi] = useVbenDrawer({ destroyOnClose: true });
+const currentRule = ref<RuleItem | null>(null);
 
 function parseLineValues(value?: string) {
   return (value || '')
@@ -213,28 +216,60 @@ const [Grid, gridApi] = useVbenVxeGrid({
 });
 
 function onCreate() {
-  ruleFormApi.resetForm();
-  ruleFormApi.setValues({
-    enabled: true,
-    priority: 100,
-    rollout_percent: 100,
-    version: 1,
+  openForm();
+}
+
+function openForm(row?: RuleItem) {
+  currentRule.value = row ?? null;
+  ruleDrawerApi.open();
+  nextTick(() => {
+    ruleFormApi.resetForm();
+    if (!row) {
+      // 新增模式，设置默认值
+      ruleFormApi.setValues({
+        enabled: true,
+        priority: 100,
+        rollout_percent: 100,
+        version: 1,
+      });
+    } else {
+      // 编辑模式，填充数据
+      ruleFormApi.setValues({
+        author_selectors: toTextValue(row.author_selectors),
+        content_selectors: toTextValue(row.content_selectors),
+        date_selectors: toTextValue(row.date_selectors),
+        enabled: row.enabled ?? true,
+        host_pattern: row.host_pattern,
+        name: row.name,
+        priority: row.priority ?? 100,
+        rollout_percent: row.rollout_percent ?? 100,
+        rollout_tenant_schemas: toTextValue(row.rollout_tenant_schemas),
+        source_selectors: toTextValue(row.source_selectors),
+        title_selectors: toTextValue(row.title_selectors),
+        version: row.version ?? 1,
+      });
+    }
   });
-  Modal.confirm({
-    title: '新增规则',
-    icon: null,
-    content: () => <RuleForm class="pt-2" layout="vertical" />, // jsx
-    okText: '保存',
-    onOk: async () => {
-      const { valid } = await ruleFormApi.validate();
-      if (!valid) throw undefined;
-      const values = await ruleFormApi.getValues<Record<string, any>>();
+}
+
+async function onSubmitRule() {
+  const { valid } = await ruleFormApi.validate();
+  if (!valid) return;
+  ruleDrawerApi.lock();
+  const values = await ruleFormApi.getValues<Record<string, any>>();
+  try {
+    if (currentRule.value?.id) {
+      await updateRule(currentRule.value.id, normalizeRulePayload(values));
+      message.success('更新成功');
+    } else {
       await createRule(normalizeRulePayload(values));
       message.success('创建成功');
-      await gridApi.query();
-    },
-    width: 720,
-  });
+    }
+    ruleDrawerApi.close();
+    await gridApi.query();
+  } finally {
+    ruleDrawerApi.unlock();
+  }
 }
 
 function onActionClick({ code, row }: Parameters<OnActionClickFn<RuleItem>>[0]) {
@@ -252,36 +287,7 @@ function onActionClick({ code, row }: Parameters<OnActionClickFn<RuleItem>>[0]) 
       break;
     }
     case 'edit': {
-      ruleFormApi.resetForm();
-      ruleFormApi.setValues({
-        author_selectors: toTextValue(row.author_selectors),
-        content_selectors: toTextValue(row.content_selectors),
-        date_selectors: toTextValue(row.date_selectors),
-        enabled: row.enabled ?? true,
-        host_pattern: row.host_pattern,
-        name: row.name,
-        priority: row.priority ?? 100,
-        rollout_percent: row.rollout_percent ?? 100,
-        rollout_tenant_schemas: toTextValue(row.rollout_tenant_schemas),
-        source_selectors: toTextValue(row.source_selectors),
-        title_selectors: toTextValue(row.title_selectors),
-        version: row.version ?? 1,
-      });
-      Modal.confirm({
-        title: '编辑规则',
-        icon: null,
-        content: () => <RuleForm class="pt-2" layout="vertical" />, // jsx
-        okText: '保存',
-        onOk: async () => {
-          const { valid } = await ruleFormApi.validate();
-          if (!valid) throw undefined;
-          const values = await ruleFormApi.getValues<Record<string, any>>();
-          await updateRule(row.id, normalizeRulePayload(values));
-          message.success('更新成功');
-          await gridApi.query();
-        },
-        width: 720,
-      });
+      openForm(row);
       break;
     }
     default: {
@@ -297,6 +303,16 @@ onMounted(() => {
 
 <template>
   <Page auto-content-height>
+    <RuleDrawer :title="currentRule ? '编辑规则' : '新增规则'">
+      <RuleForm class="mx-4" layout="vertical" />
+      <template #footer>
+        <div class="flex justify-end gap-2 pb-2 pr-4">
+          <Button @click="ruleDrawerApi.close()">取消</Button>
+          <Button type="primary" @click="onSubmitRule">保存</Button>
+        </div>
+      </template>
+    </RuleDrawer>
+
     <Grid table-title="抽取规则">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增规则</Button>
