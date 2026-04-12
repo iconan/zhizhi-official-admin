@@ -102,6 +102,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       label: '来源名称',
       componentProps: {
         allowClear: false,
+        dropdownMatchSelectWidth: false,
         loading: loadingSources,
         options: sourceOptions,
         placeholder: '请选择来源名称',

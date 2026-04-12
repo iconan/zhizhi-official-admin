@@ -3,7 +3,7 @@ import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 import { Modal, Tag, Tooltip, message } from 'ant-design-vue';
-import { Copy, RefreshCw } from 'lucide-vue-next';
+import { Copy, RotateCw } from 'lucide-vue-next';
 import dayjs from 'dayjs';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
@@ -930,9 +930,9 @@ async function handleBatchRestore() {
   @apply bg-teal-100 border-teal-600 shadow-sm;
 }
 
-/* 刷新按钮 - 中性样式 */
+/* 刷新按钮 - 中性样式（圆形与其他页面保持一致） */
 .batch-btn-refresh {
-  @apply inline-flex items-center justify-center w-7 h-7 p-0 cursor-pointer opacity-100 bg-white border-gray-400 text-gray-700;
+  @apply inline-flex items-center justify-center w-7 h-7 p-0 cursor-pointer bg-white border-gray-400 text-gray-700 rounded-full;
 }
 
 .batch-btn-refresh:hover {
@@ -998,7 +998,7 @@ async function handleBatchRestore() {
               :disabled="batchProcessing"
               @click="handleToolbarRefresh"
             >
-              <RefreshCw class="h-3.5 w-3.5" />
+              <RotateCw class="h-3.5 w-3.5" />
             </button>
           </Tooltip>
         </div>
