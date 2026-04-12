@@ -16,6 +16,7 @@ export type ExtractorStrategy = 'hybrid' | 'managed_first' | 'rules_only';
 
 export interface JobItem {
   alert_level?: AlertLevel;
+  chunk_size?: number;
   embedding_attempt_index?: number;
   embedding_dead_letter_materials?: number;
   embedding_dead_letter_ratio?: number;
@@ -47,6 +48,7 @@ export interface JobItem {
   s2_invalid_ratio?: number;
   s2_normalized_items?: number;
   s2_provider_items?: number;
+  source_name?: string;
   started_at?: null | string;
   status?: JobStatus | string;
   tenant_schema?: string;
