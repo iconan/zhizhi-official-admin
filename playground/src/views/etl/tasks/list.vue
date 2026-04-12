@@ -95,6 +95,28 @@ const columns: VxeTableGridOptions['columns'] = [
     },
   },
   {
+    field: 'source_name',
+    title: '来源名称',
+    minWidth: 140,
+    formatter: ({ cellValue }: { cellValue?: string }) => {
+      return cellValue || '--';
+    },
+  },
+  { field: 'chunk_size', title: '分块大小', width: 100 },
+  {
+    field: 'extractor_strategy',
+    title: '提取策略',
+    minWidth: 140,
+    formatter: ({ cellValue }: { cellValue?: string }) => {
+      const strategyMap: Record<string, string> = {
+        hybrid: '混合策略',
+        managed_first: '托管优先',
+        rules_only: '仅规则解析',
+      };
+      return strategyMap[cellValue ?? ''] || cellValue || '--';
+    },
+  },
+  {
     field: 'job_type',
     title: '任务类型',
     width: 100,

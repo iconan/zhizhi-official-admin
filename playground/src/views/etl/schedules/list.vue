@@ -1,7 +1,7 @@
 <script lang="tsx" setup>
 import type { SelectProps } from 'ant-design-vue';
 
-import { Page } from '@vben/common-ui';
+import { Page, useVbenDrawer } from '@vben/common-ui';
 import { Button, Modal, Tag, message } from 'ant-design-vue';
 import { nextTick, onMounted, ref } from 'vue';
 
@@ -19,6 +19,7 @@ import {
   type ScheduleItem,
 } from '#/api/etl/schedules';
 import { fetchWebSources, type EtlWebSourceItem } from '#/api/etl/sources';
+import { fetchTenants } from '#/api/iam/tenant';
 import type { ExtractorStrategy } from '#/api/etl/jobs';
 
 const defaultChunkSize = 320;
@@ -30,7 +31,13 @@ const extractorStrategyOptions = [
 ];
 
 const sourceOptions = ref<SelectProps['options']>([]);
+const tenantOptions = ref<SelectProps['options']>([]);
+const tenantMap = ref<Record<string, { name: string; schema_name: string }>>({});
+const sourceMap = ref<Record<string, string>>({});
 const loadingSources = ref(false);
+const loadingTenants = ref(false);
+const isEditing = ref(false);
+const currentScheduleId = ref<string | null>(null);
 
 function parseSeedUrls(value?: string) {
   return (value || '')
@@ -68,6 +75,10 @@ async function loadSourceOptions() {
       label: item.display_name,
       value: item.key,
     }));
+    // 建立 source key -> display_name 映射
+    items.forEach((item: EtlWebSourceItem) => {
+      sourceMap.value[item.key] = item.display_name;
+    });
   } catch (error) {
     console.error('[ETK] load web sources failed', error);
   } finally {
@@ -81,6 +92,34 @@ async function ensureSourceOptionsLoaded() {
   }
 }
 
+async function loadTenantOptions() {
+  loadingTenants.value = true;
+  try {
+    const { items } = await fetchTenants({
+      limit: 200,
+      offset: 0,
+      status: 'active',
+    });
+    tenantOptions.value = items
+      .filter((item) => item.schema_name)
+      .map((item) => ({
+        label: `${item.name} · ${item.schema_name}`,
+        value: item.schema_name,
+      }));
+    // 建立 schema_name -> tenant 映射
+    tenantMap.value = items
+      .filter((item) => item.schema_name)
+      .reduce((acc, item) => {
+        acc[item.schema_name] = { name: item.name, schema_name: item.schema_name };
+        return acc;
+      }, {} as Record<string, { name: string; schema_name: string }>);
+  } catch (error) {
+    console.error('[ETK] load tenants failed', error);
+  } finally {
+    loadingTenants.value = false;
+  }
+}
+
 const [ScheduleForm, scheduleFormApi] = useVbenForm({
   showDefaultActions: false,
   schema: [
@@ -91,10 +130,20 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       rules: z.string({ required_error: '请输入名称' }).min(1, '请输入名称').max(200, '过长'),
     },
     {
-      component: 'Input',
+      component: 'Select',
       fieldName: 'tenant_schema',
-      label: '所属区域',
-      rules: z.string({ required_error: '请输入所属区域' }).min(1, '请输入所属区域'),
+      label: '数据所属区域',
+      defaultValue: null,
+      componentProps: {
+        allowClear: true,
+        loading: loadingTenants,
+        options: tenantOptions,
+        placeholder: '请选择所属区域',
+        showSearch: true,
+        optionFilterProp: 'label',
+        style: { minWidth: '200px' },
+      },
+      rules: z.string({ required_error: '请选择所属区域' }).min(1, '请选择所属区域'),
     },
     {
       component: 'Select',
@@ -106,6 +155,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
         loading: loadingSources,
         options: sourceOptions,
         placeholder: '请选择来源名称',
+        style: { minWidth: '200px' },
       },
       rules: z.string({ required_error: '请选择来源名称' }).min(1, '请选择来源名称'),
     },
@@ -130,6 +180,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
       defaultValue: 'hybrid',
       componentProps: {
         options: extractorStrategyOptions,
+        style: { minWidth: '200px' },
       },
       rules: z.string({ required_error: '请选择提取策略' }),
     },
@@ -150,6 +201,7 @@ const [ScheduleForm, scheduleFormApi] = useVbenForm({
           { label: '启用', value: true },
           { label: '停用', value: false },
         ],
+        style: { minWidth: '200px' },
       },
       rules: z.boolean(),
     },
@@ -170,10 +222,33 @@ const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions: {
     columns: [
       { field: 'name', title: '调度名称', minWidth: 160 },
-      { field: 'tenant_schema', title: '所属区域', minWidth: 130 },
-      { field: 'source_name', title: '来源名称', minWidth: 120 },
+      {
+        field: 'tenant_schema',
+        title: '所属区域',
+        minWidth: 180,
+        formatter: ({ cellValue }: { cellValue?: string }) => {
+          const tenant = tenantMap.value[cellValue ?? ''];
+          return tenant?.name || cellValue || '--';
+        },
+      },
+      {
+        field: 'source_name',
+        title: '来源名称',
+        minWidth: 140,
+        formatter: ({ cellValue }: { cellValue?: string }) => {
+          return sourceMap.value[cellValue ?? ''] || cellValue || '--';
+        },
+      },
       { field: 'chunk_size', title: '分块大小', width: 100 },
-      { field: 'extractor_strategy', title: '提取策略', minWidth: 140 },
+      {
+        field: 'extractor_strategy',
+        title: '提取策略',
+        minWidth: 140,
+        formatter: ({ cellValue }: { cellValue?: string }) => {
+          const option = extractorStrategyOptions.find((o) => o.value === cellValue);
+          return option?.label || cellValue || '--';
+        },
+      },
       { field: 'interval_minutes', title: '间隔(分钟)', width: 100 },
       {
         field: 'enabled',
@@ -230,8 +305,32 @@ const [Grid, gridApi] = useVbenVxeGrid({
   } as VxeTableGridOptions,
 });
 
+const [ScheduleDrawer, drawerApi] = useVbenDrawer({
+  destroyOnClose: true,
+  onCancel() {
+    drawerApi.close();
+  },
+  onConfirm: async () => {
+    const { valid } = await scheduleFormApi.validate();
+    if (!valid) return;
+    const values = await scheduleFormApi.getValues<Record<string, any>>();
+    const payload = normalizeSchedulePayload(values);
+    if (isEditing.value && currentScheduleId.value) {
+      await updateSchedule(currentScheduleId.value, payload);
+      message.success('更新成功');
+    } else {
+      await createSchedule(payload);
+      message.success('创建成功');
+    }
+    drawerApi.close();
+    await gridApi.query();
+  },
+});
+
 async function onCreate() {
-  await ensureSourceOptionsLoaded();
+  await Promise.all([ensureSourceOptionsLoaded(), loadTenantOptions()]);
+  isEditing.value = false;
+  currentScheduleId.value = null;
   scheduleFormApi.resetForm();
   scheduleFormApi.setValues({
     chunk_size: defaultChunkSize,
@@ -240,27 +339,16 @@ async function onCreate() {
     interval_minutes: 60,
     source_name: resolveDefaultSourceName(),
   });
-  Modal.confirm({
-    title: '新增调度',
-    icon: null,
-    content: () => <ScheduleForm layout="vertical" class="pt-2" />, // jsx
-    okText: '保存',
-    onOk: async () => {
-      const { valid } = await scheduleFormApi.validate();
-      if (!valid) return Promise.reject();
-      const values = await scheduleFormApi.getValues<Record<string, any>>();
-      await createSchedule(normalizeSchedulePayload(values));
-      message.success('创建成功');
-      await gridApi.query();
-    },
-    width: 720,
-  });
+  drawerApi.setState({ title: '新增调度' });
+  drawerApi.open();
 }
 
 async function onActionClick({ code, row }: Parameters<OnActionClickFn<ScheduleItem>>[0]) {
   switch (code) {
     case 'edit':
-      await ensureSourceOptionsLoaded();
+      await Promise.all([ensureSourceOptionsLoaded(), loadTenantOptions()]);
+      isEditing.value = true;
+      currentScheduleId.value = row.schedule_id;
       scheduleFormApi.resetForm();
       scheduleFormApi.setValues({
         chunk_size: row.chunk_size ?? defaultChunkSize,
@@ -272,21 +360,8 @@ async function onActionClick({ code, row }: Parameters<OnActionClickFn<ScheduleI
         source_name: row.source_name ?? resolveDefaultSourceName(),
         tenant_schema: row.tenant_schema,
       });
-      Modal.confirm({
-        title: '编辑调度',
-        icon: null,
-        content: () => <ScheduleForm layout="vertical" class="pt-2" />, // jsx
-        okText: '保存',
-        onOk: async () => {
-          const { valid } = await scheduleFormApi.validate();
-          if (!valid) return Promise.reject();
-          const values = await scheduleFormApi.getValues<Record<string, any>>();
-          await updateSchedule(row.schedule_id, normalizeSchedulePayload(values));
-          message.success('更新成功');
-          await gridApi.query();
-        },
-        width: 720,
-      });
+      drawerApi.setState({ title: '编辑调度' });
+      drawerApi.open();
       break;
     case 'delete':
       Modal.confirm({
@@ -355,13 +430,16 @@ async function triggerDue() {
 }
 
 onMounted(() => {
-  void loadSourceOptions();
+  void Promise.all([loadSourceOptions(), loadTenantOptions()]);
   nextTick(() => gridApi.query());
 });
 </script>
 
 <template>
   <Page auto-content-height>
+    <ScheduleDrawer>
+      <ScheduleForm layout="vertical" class="pt-2" />
+    </ScheduleDrawer>
     <Grid table-title="定时采集">
       <template #toolbar-tools>
         <Button type="primary" @click="onCreate">新增调度</Button>
