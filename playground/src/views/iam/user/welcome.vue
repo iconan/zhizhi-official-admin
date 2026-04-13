@@ -1,7 +1,15 @@
 <script lang="ts" setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import { useUserStore } from '@vben/stores';
-import { Card, Descriptions, Tag, Avatar, Space, Typography } from 'ant-design-vue';
+import {
+  Avatar,
+  Card,
+  Descriptions,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'ant-design-vue';
 import {
   User,
   Mail,
@@ -10,12 +18,7 @@ import {
   Building2,
 } from 'lucide-vue-next';
 
-import { fetchRoles } from '#/api/iam/role';
-import { fetchOrgs } from '#/api/iam/org';
-
 const userStore = useUserStore();
-const roleMap = ref<Record<string, string>>({});
-const orgMap = ref<Record<string, string>>({});
 
 // 超级管理员角色编码
 const SUPER_ADMIN_CODE = 'super_admin';
@@ -26,56 +29,28 @@ const userInfo = computed(() => {
     email: userStore.userInfo?.email || '-',
     roles: userStore.userInfo?.roles || [],
     permissions: userStore.userInfo?.permissions?.length || 0,
-    orgId: userStore.userInfo?.org_id || null,
+    org: userStore.userInfo?.org || null,
   };
 });
 
 const orgName = computed(() => {
-  if (!userInfo.value.orgId) return '-';
-  return orgMap.value[userInfo.value.orgId] || userInfo.value.orgId;
+  if (!userInfo.value.org?.id) return '-';
+  return userInfo.value.org.name || userInfo.value.org.id;
 });
 
 const displayRoles = computed(() => {
   const roles = userInfo.value.roles;
+  if (!roles.length) return [];
+
   // 如果包含超级管理员，则只显示超级管理员
-  if (roles.includes(SUPER_ADMIN_CODE)) {
-    return [{
-      code: SUPER_ADMIN_CODE,
-      name: roleMap.value[SUPER_ADMIN_CODE] || '超级管理员',
-    }];
+  if (roles.some((role) => role.code === SUPER_ADMIN_CODE)) {
+    return [{ code: SUPER_ADMIN_CODE, name: '超级管理员' }];
   }
   // 否则显示所有角色
-  return roles.map((code: string) => ({
-    code,
-    name: roleMap.value[code] || code,
+  return roles.map((role) => ({
+    code: role.code,
+    name: role.name || role.code,
   }));
-});
-
-async function loadRoles() {
-  try {
-    const { items } = await fetchRoles({ limit: 200 });
-    items.forEach((role) => {
-      roleMap.value[role.code] = role.name;
-    });
-  } catch {
-    // 静默失败，回退到显示编码
-  }
-}
-
-async function loadOrgs() {
-  try {
-    const items = await fetchOrgs({ limit: 200 });
-    items.forEach((org: any) => {
-      orgMap.value[org.org_id] = org.name;
-    });
-  } catch {
-    // 静默失败，回退到显示ID
-  }
-}
-
-onMounted(() => {
-  loadRoles();
-  loadOrgs();
 });
 
 const welcomeMessage = computed(() => {
@@ -128,9 +103,14 @@ const welcomeMessage = computed(() => {
         <Descriptions.Item label="角色">
           <Space>
             <Users :size="16" />
-            <Tag v-for="role in displayRoles" :key="role.code" color="blue">
-              {{ role.name }}
-            </Tag>
+            <Tooltip v-for="role in displayRoles" :key="role.code">
+              <template #title>
+                {{ role.code }}
+              </template>
+              <Tag color="blue">
+                {{ role.name }}
+              </Tag>
+            </Tooltip>
             <span v-if="!displayRoles.length" class="text-gray-400">暂无角色</span>
           </Space>
         </Descriptions.Item>

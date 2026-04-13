@@ -194,7 +194,9 @@ function setupAccessGuard(router: Router) {
     // 当前登录用户拥有的角色标识列表
     try {
       const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
-      const userRoles = userInfo.roles ?? [];
+      const userRoles = (userInfo.roles ?? []).map((role) =>
+        typeof role === 'string' ? role : role.code,
+      );
 
       // 生成菜单和路由
       const { accessibleMenus, accessibleRoutes } = await generateAccess({

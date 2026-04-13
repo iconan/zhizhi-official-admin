@@ -1,5 +1,10 @@
 import { acceptHMRUpdate, defineStore } from 'pinia';
 
+interface BasicRoleInfo {
+  code: string;
+  name: string;
+}
+
 interface BasicUserInfo {
   [key: string]: any;
   /**
@@ -13,7 +18,7 @@ interface BasicUserInfo {
   /**
    * 用户角色
    */
-  roles?: string[];
+  roles?: BasicRoleInfo[];
   /**
    * 用户id
    */
@@ -45,7 +50,7 @@ export const useUserStore = defineStore('core-user', {
       this.userInfo = userInfo;
       // 设置角色信息
       const roles = userInfo?.roles ?? [];
-      this.setUserRoles(roles);
+      this.setUserRoles(roles.map((role) => role.code));
     },
     setUserRoles(roles: string[]) {
       this.userRoles = roles;

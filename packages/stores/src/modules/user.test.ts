@@ -10,7 +10,10 @@ describe('useUserStore', () => {
 
   it('returns correct userInfo', () => {
     const store = useUserStore();
-    const userInfo: any = { name: 'Jane Doe', roles: [{ value: 'user' }] };
+    const userInfo: any = {
+      name: 'Jane Doe',
+      roles: [{ code: 'user', name: '普通用户' }],
+    };
     store.setUserInfo(userInfo);
     expect(store.userInfo).toEqual(userInfo);
   });
@@ -19,7 +22,7 @@ describe('useUserStore', () => {
   it('clears userInfo and userRoles when setting null userInfo', () => {
     const store = useUserStore();
     store.setUserInfo({
-      roles: [{ roleName: 'User', value: 'user' }],
+      roles: [{ code: 'user', name: '普通用户' }],
     } as any);
     expect(store.userInfo).not.toBeNull();
     expect(store.userRoles.length).toBeGreaterThan(0);

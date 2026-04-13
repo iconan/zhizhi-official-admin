@@ -22,7 +22,10 @@ export namespace AuthApi {
 
   export interface PermissionsResult {
     permissions: string[];
-    roles: string[];
+    roles: Array<{
+      code: string;
+      name: string;
+    }>;
   }
 }
 
