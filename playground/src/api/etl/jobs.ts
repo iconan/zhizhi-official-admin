@@ -143,6 +143,26 @@ export interface JobInput {
   tenant_schema: string;
 }
 
+export interface ExcelImportRowResult {
+  accepted: boolean;
+  error?: string | null;
+  extractor_strategy?: string | null;
+  job_id?: string | null;
+  queue_name?: string | null;
+  row_index: number;
+  seed_urls?: string[];
+  source_name?: string | null;
+  tenant_schema?: string | null;
+}
+
+export interface ExcelImportResponse {
+  failed_count: number;
+  filename: string;
+  items: ExcelImportRowResult[];
+  success_count: number;
+  total_rows: number;
+}
+
 export async function fetchJobs(params: JobQuery = {}) {
   const res = await requestClient.get(`${ETL_PREFIX}/jobs`, { params });
   const data = (res as any)?.data ?? res;
@@ -195,4 +215,18 @@ export async function replayDeadLetter() {
 
 export async function createJob(payload: JobInput) {
   return requestClient.post(`${ETL_PREFIX}/collect/web`, payload);
+}
+
+export async function importExcelJobs(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return requestClient.post(`${ETL_PREFIX}/import`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }) as Promise<{
+    data?: {
+      data?: ExcelImportResponse;
+    };
+  }>;
 }

@@ -12,6 +12,8 @@ import {
   Col,
   Form,
   Input,
+  Tabs,
+  Upload,
   message,
   Row,
   Select,
@@ -19,7 +21,7 @@ import {
   Tag,
 } from 'ant-design-vue';
 
-import { createJob } from '#/api/etl/jobs';
+import { createJob, importExcelJobs } from '#/api/etl/jobs';
 import { fetchWebSources } from '#/api/etl/sources';
 import { fetchTenants } from '#/api/iam/tenant';
 
@@ -28,6 +30,8 @@ const emit = defineEmits<{ success: [] }>();
 const loadingSources = ref(false);
 const loadingTenants = ref(false);
 const submitting = ref(false);
+const importing = ref(false);
+const activeTab = ref<'web' | 'excel'>('web');
 const sourceOptions = ref<SelectProps['options']>([]);
 const tenantOptions = ref<SelectProps['options']>([]);
 const defaultChunkSize = 320;
@@ -57,6 +61,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onOpenChange(isOpen) {
     if (isOpen) {
       resetForm();
+      activeTab.value = 'web';
       void loadSourceOptions();
       void loadTenantOptions();
     }
@@ -138,6 +143,29 @@ function parseSeedUrls(seedUrlsText: string) {
     .filter(Boolean);
 }
 
+async function handleImportExcel(file: File) {
+  if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xlsm')) {
+    message.warning('仅支持 Excel 文件（.xlsx/.xlsm）');
+    return false;
+  }
+
+  importing.value = true;
+  const hide = message.loading({ content: '导入中...', duration: 0 });
+  try {
+    const res = await importExcelJobs(file);
+    const payload = (res as any)?.data?.data ?? (res as any)?.data ?? res;
+    const summary = payload?.success_count ?? 0;
+    const failed = payload?.failed_count ?? 0;
+    message.success(`导入完成：成功 ${summary} 条，失败 ${failed} 条`);
+  } catch (error) {
+    console.error('[ETL Task] import excel failed', error);
+  } finally {
+    importing.value = false;
+    hide();
+  }
+  return false;
+}
+
 async function submitWeb() {
   if (!validateCommon(webForm.value)) return;
   const tenantSchema = webForm.value.tenant_schema;
@@ -189,121 +217,143 @@ async function submitWeb() {
 
 <template>
   <Drawer class="w-full max-w-[960px]" title="创建网页采集任务">
-    <div class="px-4 pb-4 pt-3">
-      <Card
-        :bordered="false"
-        class="mb-4 overflow-hidden rounded-2xl shadow-sm"
-      >
-        <div
-          class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
-        >
-          <div class="space-y-2">
-            <div class="text-2xl font-semibold text-[var(--ant-color-text)]">
-              创建网页采集任务
-            </div>
-            <div class="text-sm text-[var(--ant-color-text-description)]">
-              当前页面暂时仅保留网页采集方式，字段已按后端 ETL
-              管理接口对齐，创建后可在任务管理页继续查看执行状态。
-            </div>
+    <div class="px-4 pb-2 pt-2">
+      <Card :bordered="false" class="mb-1 rounded-2xl shadow-sm">
+        <div class="flex flex-col gap-1.5">
+          <div class="max-w-[700px] text-xs leading-4 text-[var(--ant-color-text-description)]">
+            支持网页采集手工创建，也支持 Excel 导入批量创建，最终都复用同一套采集逻辑与来源规则。
           </div>
-          <Space wrap>
-            <Tag color="processing">已开通区域 {{ activeTenantCount }}</Tag>
-            <Button :loading="loadingTenants" @click="loadTenantOptions">
-              刷新区域列表
-            </Button>
-          </Space>
+          <div>
+            <Space wrap size="small">
+              <Tag color="processing">已开通区域 {{ activeTenantCount }}</Tag>
+              <Button size="small" :loading="loadingTenants" @click="loadTenantOptions">
+                刷新区域列表
+              </Button>
+            </Space>
+          </div>
         </div>
       </Card>
 
-      <Row :gutter="[16, 16]">
-        <Col :lg="16" :span="24">
-          <Card :bordered="false" class="rounded-2xl shadow-sm">
-            <Form layout="vertical">
-              <Row :gutter="16">
-                <Col :span="24">
-                  <Form.Item label="数据所属区域" required>
-                    <Select
-                      v-model:value="webForm.tenant_schema"
-                      :loading="loadingTenants"
-                      :options="tenantOptions"
-                      allow-clear
-                      placeholder="请选择所属区域"
-                      show-search
-                      option-filter-prop="label"
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item label="来源名称" required>
-                <Select
-                  v-model:value="webForm.source_name"
-                  :loading="loadingSources"
-                  :options="sourceOptions"
-                  placeholder="请选择来源名称"
-                />
-              </Form.Item>
-              <Form.Item label="起始 URL 列表" required>
-                <Input.TextArea
-                  v-model:value="webForm.seed_urls_text"
-                  :rows="5"
-                  placeholder="每行一个 URL，至少一条，例如：https://example.com/news"
-                />
-              </Form.Item>
-              <Form.Item label="分块大小 chunk_size" required>
-                <Input
-                  v-model:value="webForm.chunk_size"
-                  type="number"
-                  placeholder="默认 320，允许范围 80~1200"
-                />
-              </Form.Item>
-              <Form.Item label="提取策略 extractor_strategy" required>
-                <Select
-                  v-model:value="webForm.extractor_strategy"
-                  :options="extractorStrategyOptions"
-                  placeholder="请选择提取策略，默认 hybrid"
-                />
-              </Form.Item>
-              <div class="flex justify-end gap-3">
-                <Button @click="resetForm">
-                  重置
-                </Button>
-                <Button :loading="submitting" type="primary" @click="submitWeb">
-                  创建网页任务
-                </Button>
-              </div>
-            </Form>
-          </Card>
-        </Col>
+      <Tabs v-model:activeKey="activeTab" class="mb-2">
+        <Tabs.TabPane key="web" tab="网页采集" />
+        <Tabs.TabPane key="excel" tab="Excel 导入" />
+      </Tabs>
 
-        <Col :lg="8" :span="24">
-          <Card :bordered="false" class="rounded-2xl shadow-sm">
-            <div class="mb-4 text-base font-medium">填写说明</div>
-            <div
-              class="space-y-4 text-sm text-[var(--ant-color-text-description)]"
-            >
-              <div>
-                <div class="mb-1 font-medium text-[var(--ant-color-text)]">
-                  选择区域
-                </div>
-                <div>
-                  下拉数据来自 IAM
-                  租户列表，仅展示状态为“已开通”的租户，并使用其 `schema_name`
-                  作为 `tenant_schema` 提交。
-                </div>
-              </div>
-              <div>
-                <div class="mb-1 font-medium text-[var(--ant-color-text)]">
-                  网页采集
-                </div>
-                <div>
-                  `seed_urls` 需至少一条、每行一个 http(s) 地址；`hybrid`
-                  为默认策略，会先尝试托管提取，失败后再回退到规则解析。
-                </div>
-              </div>
+      <template v-if="activeTab === 'excel'">
+        <Card :bordered="false" class="rounded-2xl shadow-sm">
+          <div class="flex flex-col gap-3">
+            <div class="max-w-[700px] text-xs leading-4 text-[var(--ant-color-text-description)]">
+              支持上传 <span class="font-semibold text-[var(--ant-color-text)]">Excel / CSV</span> 文件，按行创建网页采集任务，最终复用现有采集逻辑与来源规则。
             </div>
-          </Card>
-        </Col>
-      </Row>
+            <div>
+              <Space wrap>
+                <Button>
+                  <a href="/static/templates/etl_web_collect_import_template.csv" download>
+                    下载模板
+                  </a>
+                </Button>
+                <Upload
+                  :before-upload="handleImportExcel"
+                  accept=".xlsx,.xlsm,.csv"
+                  :show-upload-list="false"
+                >
+                  <Button :loading="importing" type="primary">上传并导入（.xlsx,.xlsm,.csv）</Button>
+                </Upload>
+              </Space>
+            </div>
+          </div>
+        </Card>
+      </template>
+
+      <template v-else>
+        <Row :gutter="[16, 16]">
+          <Col :lg="16" :span="24">
+            <Card :bordered="false" class="rounded-2xl shadow-sm">
+              <Form layout="vertical">
+                <Row :gutter="16">
+                  <Col :span="24">
+                    <Form.Item label="数据所属区域" required>
+                      <Select
+                        v-model:value="webForm.tenant_schema"
+                        :loading="loadingTenants"
+                        :options="tenantOptions"
+                        allow-clear
+                        placeholder="请选择所属区域"
+                        show-search
+                        option-filter-prop="label"
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item label="来源名称" required>
+                  <Select
+                    v-model:value="webForm.source_name"
+                    :loading="loadingSources"
+                    :options="sourceOptions"
+                    placeholder="请选择来源名称"
+                  />
+                </Form.Item>
+                <Form.Item label="起始 URL 列表" required>
+                  <Input.TextArea
+                    v-model:value="webForm.seed_urls_text"
+                    :rows="4"
+                    placeholder="每行一个 URL，至少一条，例如：https://example.com/news"
+                  />
+                </Form.Item>
+                <Form.Item label="分块大小 chunk_size" required>
+                  <Input
+                    v-model:value="webForm.chunk_size"
+                    type="number"
+                    placeholder="默认 320，允许范围 80~1200"
+                  />
+                </Form.Item>
+                <Form.Item label="提取策略 extractor_strategy" required>
+                  <Select
+                    v-model:value="webForm.extractor_strategy"
+                    :options="extractorStrategyOptions"
+                    placeholder="请选择提取策略，默认 hybrid"
+                  />
+                </Form.Item>
+                <div class="flex justify-end gap-3">
+                  <Button @click="resetForm">
+                    重置
+                  </Button>
+                  <Button :loading="submitting" type="primary" @click="submitWeb">
+                    创建网页任务
+                  </Button>
+                </div>
+              </Form>
+            </Card>
+          </Col>
+
+          <Col :lg="8" :span="24">
+            <Card :bordered="false" class="rounded-2xl shadow-sm">
+              <div class="mb-2 text-sm font-medium">填写说明</div>
+              <div class="space-y-2 text-xs leading-4 text-[var(--ant-color-text-description)]">
+                <div>
+                  <div class="mb-0.5 font-medium text-[var(--ant-color-text)]">
+                    选择区域
+                  </div>
+                  <div>
+                    下拉数据来自 IAM
+                    租户列表，仅展示状态为“已开通”的租户，并使用其 `schema_name`
+                    作为 `tenant_schema` 提交。
+                  </div>
+                </div>
+                <div>
+                  <div class="mb-0.5 font-medium text-[var(--ant-color-text)]">
+                    网页采集
+                  </div>
+                  <div>
+                    `seed_urls` 需至少一条、每行一个 http(s) 地址；`hybrid`
+                    为默认策略，会先尝试托管提取，失败后再回退到规则解析。
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </Col>
+        </Row>
+      </template>
     </div>
   </Drawer>
 </template>

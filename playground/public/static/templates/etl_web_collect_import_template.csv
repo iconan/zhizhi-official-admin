@@ -1,0 +1,4 @@
+tenant_schema,source_name,seed_urls,chunk_size,extractor_strategy
+central,xinhua,"https://www.news.cn/politics/20250320/abc.htm
+https://www.news.cn/politics/20250320/def.htm",320,hybrid
+central,people_daily,"https://paper.people.com.cn/rmrb/html/2025-03/20/nw.D110000renmrb_20250320_1-01.htm",320,hybrid
