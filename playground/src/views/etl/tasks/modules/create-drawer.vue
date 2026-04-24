@@ -144,8 +144,13 @@ function parseSeedUrls(seedUrlsText: string) {
 }
 
 async function handleImportExcel(file: File) {
-  if (!file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xlsm')) {
-    message.warning('仅支持 Excel 文件（.xlsx/.xlsm）');
+  const lowerName = file.name.toLowerCase();
+  if (
+    !lowerName.endsWith('.xlsx')
+    && !lowerName.endsWith('.xlsm')
+    && !lowerName.endsWith('.csv')
+  ) {
+    message.warning('仅支持 Excel/CSV 文件（.xlsx/.xlsm/.csv）');
     return false;
   }
 

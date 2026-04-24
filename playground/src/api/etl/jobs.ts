@@ -35,6 +35,7 @@ export interface JobItem {
   is_finished?: boolean;
   job_id: string;
   job_type?: JobType;
+  job_source?: string;
   low_quality_ratio?: number;
   low_quality_rows?: number;
   quality_score_avg?: number;

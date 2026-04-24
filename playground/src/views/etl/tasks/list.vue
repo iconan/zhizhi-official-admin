@@ -60,6 +60,11 @@ const alertLabelMap: Record<string, string> = {
   warning: '告警',
 };
 
+const jobTypeLabelMap: Record<string, string> = {
+  article_batch_parse: '文章批量解析',
+  web_collect: '网页采集',
+};
+
 function formatPercent(value?: number) {
   if (value === null || value === undefined) return '--';
   return `${(value * 100).toFixed(1)}%`;
@@ -121,8 +126,23 @@ const columns: VxeTableGridOptions['columns'] = [
   {
     field: 'job_type',
     title: '任务类型',
-    width: 100,
-    formatter: ({ cellValue }) => (cellValue === 'web_collect' ? '网页采集' : cellValue || '--'),
+    minWidth: 160,
+    formatter: ({ row, cellValue }) => {
+      const label = jobTypeLabelMap[cellValue ?? ''] || cellValue || '--';
+      return row?.job_source === 'excel_import' ? `${label}（Excel 导入）` : label;
+    },
+  },
+  {
+    field: 'job_source',
+    title: '任务来源',
+    width: 120,
+    formatter: ({ cellValue }: { cellValue?: string }) => {
+      const sourceMap: Record<string, string> = {
+        excel_import: 'Excel 导入',
+        web_collect: '网页采集',
+      };
+      return sourceMap[cellValue ?? ''] || cellValue || '--';
+    },
   },
   { field: 'status', title: '状态', width: 100, slots: { default: 'status' } },
   { field: 'alert_level', title: '风险等级', width: 100, slots: { default: 'alertLevel' } },
