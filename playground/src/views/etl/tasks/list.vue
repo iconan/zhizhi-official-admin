@@ -2,7 +2,8 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Button, Card, Col, Modal, Row, Statistic, Tag, message } from 'ant-design-vue';
+import { Button, Card, Col, Modal, Row, Statistic, Tag, Tooltip, message } from 'ant-design-vue';
+import { Copy } from 'lucide-vue-next';
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
@@ -87,7 +88,6 @@ function canReplayEmbedding(row: JobItem) {
 }
 
 const columns: VxeTableGridOptions['columns'] = [
-  { field: 'job_id', title: '任务 ID', minWidth: 220 },
   {
     field: 'tenant_schema',
     title: '所属区域',
@@ -165,6 +165,12 @@ const columns: VxeTableGridOptions['columns'] = [
   { field: 'enqueued_at', title: '入队时间', minWidth: 150 },
   { field: 'started_at', title: '开始时间', minWidth: 150 },
   { field: 'ended_at', title: '结束时间', minWidth: 150 },
+  {
+    field: 'job_id',
+    title: '任务 ID',
+    minWidth: 150,
+    slots: { default: 'job-id' },
+  },
   {
     title: '操作',
     field: 'operation',
@@ -430,6 +436,13 @@ async function triggerReplayDeadLetter() {
   });
 }
 
+function copyToClipboard(text: string | undefined) {
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    message.success('已复制到剪贴板');
+  });
+}
+
 async function onActionClick({ code, row }: Parameters<OnActionClickFn<JobItem>>[0]) {
   const actionMap = {
     cancel: async () => {
@@ -536,6 +549,17 @@ onBeforeUnmount(() => {
       </template>
       <template #s2DeduplicatedRatio="{ row }">
         {{ formatPercent(row.s2_deduplicated_ratio) }}
+      </template>
+      <template #job-id="{ row }">
+        <Tooltip :title="row.job_id">
+          <span
+            class="cursor-pointer text-primary hover:underline"
+            @click="copyToClipboard(row.job_id)"
+          >
+            {{ row.job_id?.slice(0, 8) }}...
+            <Copy class="ml-1 inline-block h-3 w-3" />
+          </span>
+        </Tooltip>
       </template>
     </Grid>
   </Page>
