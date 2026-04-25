@@ -14,6 +14,7 @@ import {
   batchPublishArticles,
   batchRestoreArticles,
   deleteArticle,
+  fetchArticleTags,
   fetchArticles,
   fetchArticlesAggregate,
   publishArticle,
@@ -82,6 +83,15 @@ const columns: VxeTableGridOptions['columns'] = [
   { field: 'author', title: '作者/责编', width: 100 },
   { field: 'publish_date', title: '发布日期', width: 110 },
   { field: 'status', title: '状态', width: 90, slots: { default: 'status' } },
+  {
+    field: 'tags',
+    title: '文章标签',
+    minWidth: 180,
+    formatter: ({ cellValue }: { cellValue?: string[] }) => {
+      if (!cellValue || cellValue.length === 0) return '--';
+      return cellValue.join(', ');
+    },
+  },
   { field: 'word_count', title: '字数', width: 80 },
   { field: 'annotations_count', title: '批注数', width: 80 },
   { field: 'fallback_count', title: 'Fallback', width: 90 },
@@ -215,6 +225,8 @@ const batchRestoreDisabledReason = computed(() => {
   return '';
 });
 
+const tagOptions = ref<{ label: string; value: string }[]>([]);
+
 const [DetailDrawer, detailDrawerApi] = useVbenDrawer({
   connectedComponent: ArticleDetailDrawer,
   destroyOnClose: true,
@@ -246,6 +258,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
             tenant_schema: tenantSchema,
             status: formValues?.status || undefined,
             source_name: formValues?.source_name || undefined,
+            tag: formValues?.tag || undefined,
             keyword: formValues?.keyword || undefined,
             date_from: dateRange?.[0] ? dayjs(dateRange[0]).format('YYYY-MM-DD') : undefined,
             date_to: dateRange?.[1] ? dayjs(dateRange[1]).format('YYYY-MM-DD') : undefined,
@@ -327,6 +340,19 @@ const [Grid, gridApi] = useVbenVxeGrid({
         },
       },
       {
+        component: 'Select',
+        fieldName: 'tag',
+        label: '文章标签',
+        componentProps: {
+          allowClear: true,
+          options: tagOptions,
+          showSearch: true,
+          optionFilterProp: 'label',
+          placeholder: '请选择标签',
+          style: { width: '100%' },
+        },
+      },
+      {
         component: 'RangePicker',
         fieldName: 'date_range',
         label: '发布日期',
@@ -345,7 +371,7 @@ const gridRef = ref<InstanceType<typeof Grid>>();
 // 在组件挂载后初始化数据
 onMounted(async () => {
   await nextTick();
-  await Promise.all([loadSources(), loadTenants()]);
+  await Promise.all([loadSources(), loadTenants(), loadTags()]);
   // 租户加载完成后自动查询数据
   await gridApi.query();
 });
@@ -533,6 +559,18 @@ async function loadTenants() {
     message.error('加载区域列表失败');
   } finally {
     loadingTenants.value = false;
+  }
+}
+
+async function loadTags() {
+  try {
+    const tags = await fetchArticleTags();
+    tagOptions.value = tags.map((tag) => ({
+      label: tag,
+      value: tag,
+    }));
+  } catch (error) {
+    message.error('加载标签列表失败');
   }
 }
 

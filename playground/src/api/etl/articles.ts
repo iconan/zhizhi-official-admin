@@ -110,6 +110,7 @@ export interface ArticleQuery {
   tenant_schema: string;
   status?: ArticleStatus;
   source_name?: string;
+  tag?: string;
   keyword?: string;
   date_from?: string;
   date_to?: string;
@@ -176,6 +177,13 @@ export interface BatchStatusResult {
   success_count: number;
   failed_count: number;
   failures: { article_id: string; error: string }[];
+}
+
+export async function fetchArticleTags(): Promise<string[]> {
+  const res = await requestClient.get(`${ETL_PREFIX}/articles/tags`);
+  const data = (res as any)?.data ?? res;
+  const payload = data?.data ?? data ?? [];
+  return Array.isArray(payload) ? payload : [];
 }
 
 export async function fetchArticles(params: ArticleQuery): Promise<ArticleListResponse> {
