@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import { Profile } from '@vben/common-ui';
 import { useUserStore } from '@vben/stores';
@@ -10,6 +10,16 @@ import ProfilePasswordSetting from './password-setting.vue';
 import ProfileSecuritySetting from './security-setting.vue';
 
 const userStore = useUserStore();
+
+const profileUserInfo = computed(() => {
+  const userInfo = userStore.userInfo;
+  if (!userInfo) return null;
+
+  return {
+    ...userInfo,
+    roles: userInfo.roles?.map((role) => role.code),
+  };
+});
 
 const tabsValue = ref<string>('basic');
 
@@ -36,7 +46,7 @@ const tabs = ref([
   <Profile
     v-model:model-value="tabsValue"
     title="个人中心"
-    :user-info="userStore.userInfo"
+    :user-info="profileUserInfo"
     :tabs="tabs"
   >
     <template #content>

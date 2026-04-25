@@ -127,9 +127,8 @@ const columns: VxeTableGridOptions['columns'] = [
     field: 'job_type',
     title: '任务类型',
     minWidth: 160,
-    formatter: ({ row, cellValue }) => {
-      const label = jobTypeLabelMap[cellValue ?? ''] || cellValue || '--';
-      return row?.job_source === 'excel_import' ? `${label}（Excel 导入）` : label;
+    formatter: ({ cellValue }) => {
+      return jobTypeLabelMap[cellValue ?? ''] || cellValue || '--';
     },
   },
   {
@@ -138,8 +137,9 @@ const columns: VxeTableGridOptions['columns'] = [
     width: 120,
     formatter: ({ cellValue }: { cellValue?: string }) => {
       const sourceMap: Record<string, string> = {
-        excel_import: 'Excel 导入',
-        web_collect: '网页采集',
+        excel_import: 'Excel导入',
+        manual_create: '手动创建',
+        schedule_run: '调度执行',
       };
       return sourceMap[cellValue ?? ''] || cellValue || '--';
     },
