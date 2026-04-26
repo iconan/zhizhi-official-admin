@@ -85,7 +85,7 @@ const columns: VxeTableGridOptions['columns'] = [
   { field: 'status', title: '状态', width: 90, slots: { default: 'status' } },
   {
     field: 'tags',
-    title: '文章标签',
+    title: '标签',
     minWidth: 180,
     formatter: ({ cellValue }: { cellValue?: string[] }) => {
       if (!cellValue || cellValue.length === 0) return '--';
@@ -342,7 +342,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
       {
         component: 'Select',
         fieldName: 'tag',
-        label: '文章标签',
+        label: '标签',
         componentProps: {
           allowClear: true,
           options: tagOptions,
