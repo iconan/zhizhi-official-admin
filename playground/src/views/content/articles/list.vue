@@ -2,10 +2,10 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Modal, Tag, Tooltip, message } from 'ant-design-vue';
+import { Button, Dropdown, Menu, MenuItem, Modal, Tag, Tooltip, message } from 'ant-design-vue';
 import { Copy, RotateCw } from 'lucide-vue-next';
 import dayjs from 'dayjs';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
@@ -51,7 +51,7 @@ async function copyToClipboard(text: string) {
   }
 }
 
-const columns: VxeTableGridOptions['columns'] = [
+const columns = markRaw([
   {
     type: 'checkbox',
     width: 60,
@@ -76,8 +76,7 @@ const columns: VxeTableGridOptions['columns'] = [
     title: '来源',
     width: 120,
     formatter: ({ cellValue }: { cellValue: string }) => {
-      const source = sourceOptions.value.find((s) => s.value === cellValue);
-      return source?.label || cellValue;
+      return sourceMap.value[cellValue] || cellValue;
     },
   },
   { field: 'author', title: '作者/责编', width: 100 },
@@ -107,67 +106,18 @@ const columns: VxeTableGridOptions['columns'] = [
   {
     title: '操作',
     field: 'operation',
-    width: 360,
+    width: 200,
     fixed: 'right',
     showOverflow: false,
-    cellRender: {
-      attrs: { onClick: onActionClick },
-      name: 'CellOperation',
-      options: [
-        { code: 'preview', text: '预览' },
-        { code: 'detail', text: '详情' },
-        {
-          code: 'parse',
-          text: '解析',
-          disabled: (row: ArticleListItem) => row.status !== 'crawled',
-          popconfirm: true,
-          confirmTitle: '确认解析',
-          confirmMessage: '确认解析该文章？将生成 AST 结构和批注。',
-        },
-        {
-          code: 'publish',
-          text: '发布',
-          disabled: (row: ArticleListItem) => row.status !== 'parsed',
-          popconfirm: true,
-          confirmTitle: '确认发布',
-          confirmMessage: '确认发布该文章？',
-          class: (row: ArticleListItem) => row.status === 'parsed' ? 'text-green-500 hover:text-green-600' : '',
-        },
-        {
-          code: 'archive',
-          text: '归档',
-          disabled: (row: ArticleListItem) => row.status !== 'published',
-          popconfirm: true,
-          confirmTitle: '确认归档',
-          confirmMessage: '确认归档该文章？',
-          class: (row: ArticleListItem) => row.status === 'published' ? 'text-orange-500 hover:text-orange-600' : '',
-        },
-        {
-          code: 'restore',
-          text: '恢复',
-          disabled: (row: ArticleListItem) => row.status !== 'archived',
-          popconfirm: true,
-          confirmTitle: '确认恢复',
-          confirmMessage: '确认将文章恢复为已发布状态？',
-          class: (row: ArticleListItem) => row.status === 'archived' ? 'text-teal-500 hover:text-teal-600' : '',
-        },
-        {
-          code: 'delete',
-          text: '删除',
-          disabled: (row: ArticleListItem) => row.status !== 'archived' && row.status !== 'parsed',
-          confirmTitle: '确认永久删除',
-          confirmMessage: '确认永久删除该文章？删除后将同时清理关联素材和标注，且无法恢复。',
-          class: (row: ArticleListItem) => (row.status === 'archived' || row.status === 'parsed') ? 'text-red-500 hover:text-red-600' : '',
-        },
-      ],
-    },
+    slots: { default: 'operation' },
   },
-];
+]) as VxeTableGridOptions['columns'];
 
-const sourceOptions = ref<{ label: string; value: string }[]>([]);
-const tenantOptions = ref<{ label: string; value: string }[]>([]);
-const tenants = ref<IamTenant[]>([]);
-const tenantMap = ref<Record<string, IamTenant>>({});
+const sourceOptions = shallowRef<{ label: string; value: string }[]>([]);
+const sourceMap = shallowRef<Record<string, string>>({});
+const tenantOptions = shallowRef<{ label: string; value: string }[]>([]);
+const tenants = shallowRef<IamTenant[]>([]);
+const tenantMap = shallowRef<Record<string, IamTenant>>({});
 const selectedTenant = ref<string>();
 const loadingTenants = ref(false);
 type SelectedArticleRow = Pick<ArticleListItem, 'id' | 'tenant_schema' | 'status'>;
@@ -241,7 +191,8 @@ const [Grid, gridApi] = useVbenVxeGrid({
   gridOptions: {
     columns,
     height: 'auto',
-    keepSource: true,
+    scrollY: { enabled: true, gt: 10 },
+    scrollX: { enabled: true, gt: 10 },
     pagerConfig: { enabled: true, pageSize: 20, pageSizes: [10, 20, 50, 100] },
     proxyConfig: {
       enabled: true,
@@ -254,12 +205,19 @@ const [Grid, gridApi] = useVbenVxeGrid({
           const dateRange = formValues?.date_range;
           const tenantSchema = formValues?.tenant_schema || undefined;
           selectedTenant.value = tenantSchema;
+          const rawKeyword = (formValues?.keyword || '').trim();
+          // 关键词只有 1 个字符时不触发后端查询，保留当前列表数据
+          if (rawKeyword.length === 1) {
+            const vxeGrid = (gridRef.value as any)?.getTableInstance?.() || (gridApi.grid as any);
+            const currentItems = vxeGrid?.getFullData?.() ?? [];
+            return { items: currentItems, total: currentItems.length, has_more: false } as any;
+          }
           const queryParams = {
             tenant_schema: tenantSchema,
             status: formValues?.status || undefined,
             source_name: formValues?.source_name || undefined,
             tag: formValues?.tag || undefined,
-            keyword: formValues?.keyword || undefined,
+            keyword: rawKeyword || undefined,
             date_from: dateRange?.[0] ? dayjs(dateRange[0]).format('YYYY-MM-DD') : undefined,
             date_to: dateRange?.[1] ? dayjs(dateRange[1]).format('YYYY-MM-DD') : undefined,
             limit,
@@ -298,7 +256,10 @@ const [Grid, gridApi] = useVbenVxeGrid({
         component: 'Input',
         fieldName: 'keyword',
         label: '关键词',
-        componentProps: { allowClear: true, placeholder: '标题/内容搜索' },
+        componentProps: {
+          allowClear: true,
+          placeholder: '标题/内容搜索（至少 2 字符）',
+        },
       },
       {
         component: 'Select',
@@ -525,10 +486,15 @@ async function runBatchTaskInModal(
 async function loadSources() {
   try {
     const { items } = await fetchWebSources();
-    sourceOptions.value = items.map((s: EtlWebSourceItem) => ({
+    const mapped = items.map((s: EtlWebSourceItem) => ({
       label: s.display_name || s.key,
       value: s.key,
     }));
+    sourceOptions.value = mapped;
+    sourceMap.value = mapped.reduce((acc, s) => {
+      acc[s.value] = s.label;
+      return acc;
+    }, {} as Record<string, string>);
   } catch (error) {
   }
 }
@@ -572,6 +538,84 @@ async function loadTags() {
   } catch (error) {
     message.error('加载标签列表失败');
   }
+}
+
+interface MoreAction {
+  code: 'parse' | 'publish' | 'archive' | 'restore' | 'delete';
+  text: string;
+  cls?: string;
+  confirmTitle: string;
+  confirmMessage: string;
+  danger?: boolean;
+}
+
+const MORE_ACTION_DEFS: Record<ArticleStatus, MoreAction[]> = {
+  crawled: [
+    {
+      code: 'parse',
+      text: '解析',
+      confirmTitle: '确认解析',
+      confirmMessage: '确认解析该文章？将生成 AST 结构和批注。',
+    },
+  ],
+  parsed: [
+    {
+      code: 'publish',
+      text: '发布',
+      cls: 'text-green-500',
+      confirmTitle: '确认发布',
+      confirmMessage: '确认发布该文章？',
+    },
+    {
+      code: 'delete',
+      text: '删除',
+      cls: 'text-red-500',
+      danger: true,
+      confirmTitle: '确认永久删除',
+      confirmMessage: '确认永久删除该文章？删除后将同时清理关联素材和标注，且无法恢复。',
+    },
+  ],
+  published: [
+    {
+      code: 'archive',
+      text: '归档',
+      cls: 'text-orange-500',
+      confirmTitle: '确认归档',
+      confirmMessage: '确认归档该文章？',
+    },
+  ],
+  archived: [
+    {
+      code: 'restore',
+      text: '恢复',
+      cls: 'text-teal-500',
+      confirmTitle: '确认恢复',
+      confirmMessage: '确认将文章恢复为已发布状态？',
+    },
+    {
+      code: 'delete',
+      text: '删除',
+      cls: 'text-red-500',
+      danger: true,
+      confirmTitle: '确认永久删除',
+      confirmMessage: '确认永久删除该文章？删除后将同时清理关联素材和标注，且无法恢复。',
+    },
+  ],
+};
+
+function getMoreActions(row: ArticleListItem): MoreAction[] {
+  return MORE_ACTION_DEFS[row.status as ArticleStatus] ?? [];
+}
+
+function handleMoreAction(action: MoreAction, row: ArticleListItem) {
+  Modal.confirm({
+    title: action.confirmTitle,
+    content: action.confirmMessage,
+    okText: '确认',
+    cancelText: '取消',
+    okButtonProps: action.danger ? { danger: true } : undefined,
+    onOk: () => onActionClick({ code: action.code, row } as any),
+  });
 }
 
 async function onActionClick({ code, row }: Parameters<OnActionClickFn<ArticleListItem>>[0]) {
@@ -1056,6 +1100,42 @@ async function handleBatchRestore() {
         <Tag :color="statusColorMap[row.status as ArticleStatus] ?? 'default'">
           {{ statusLabelMap[row.status as ArticleStatus] ?? row.status ?? '--' }}
         </Tag>
+      </template>
+      <template #operation="{ row }">
+        <div class="flex items-center gap-1">
+          <Button
+            type="link"
+            size="small"
+            @click="onActionClick({ code: 'preview', row: row as ArticleListItem } as any)"
+          >
+            预览
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            @click="onActionClick({ code: 'detail', row: row as ArticleListItem } as any)"
+          >
+            详情
+          </Button>
+          <Dropdown
+            v-if="getMoreActions(row as ArticleListItem).length > 0"
+            :trigger="['click']"
+          >
+            <Button type="link" size="small">更多</Button>
+            <template #overlay>
+              <Menu>
+                <MenuItem
+                  v-for="action in getMoreActions(row as ArticleListItem)"
+                  :key="action.code"
+                  :class="action.cls"
+                  @click="handleMoreAction(action, row as ArticleListItem)"
+                >
+                  {{ action.text }}
+                </MenuItem>
+              </Menu>
+            </template>
+          </Dropdown>
+        </div>
       </template>
     </Grid>
   </Page>
