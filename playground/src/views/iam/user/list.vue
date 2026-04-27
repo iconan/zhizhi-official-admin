@@ -21,11 +21,14 @@ import {
   updateAdminUser,
   updateAdminUserStatus,
 } from '#/api/iam/user';
+import { useFieldScopeStore } from '#/store/field-scope';
 import {
   getActiveOrgOptions,
   getActiveOrgTreeOptions,
   getAllOrgOptions,
 } from '#/store/tree-data';
+
+const fieldScopeStore = useFieldScopeStore();
 
 type ActiveStatus = boolean;
 
@@ -212,9 +215,10 @@ const onActionClick: OnActionClickFn<IamAdminUser> = ({ code, row }) => {
 };
 
 function getColumns(onActionClickFn: OnActionClickFn<IamAdminUser>) {
-  return [
+  const rawColumns = [
     { field: 'name', title: '用户名称', minWidth: 140 },
-    { field: 'email', title: '邮箱', minWidth: 200 },
+    // sensitive: 缺少 admin_user:field:email:view 时该列不渲染
+    { field: 'email', title: '邮箱', minWidth: 200, sensitive: true },
     {
       field: 'org_id',
       title: '所属组织',
@@ -253,6 +257,7 @@ function getColumns(onActionClickFn: OnActionClickFn<IamAdminUser>) {
       },
     },
   ];
+  return fieldScopeStore.filterColumns(rawColumns as any, 'admin_user');
 }
 
 const [Grid, gridApi] = useVbenVxeGrid({
@@ -326,6 +331,9 @@ const [Grid, gridApi] = useVbenVxeGrid({
 });
 
 onMounted(async () => {
+  // 先加载字段级权限映射，再重建列定义，避免敏感列闪烁
+  await fieldScopeStore.ensureLoaded();
+  gridApi.setGridOptions({ columns: getColumns(onActionClick) });
   await Promise.all([loadRoleOptionsForOrg(), loadOrgOptions()]);
   nextTick(() => void gridApi.query());
 });
