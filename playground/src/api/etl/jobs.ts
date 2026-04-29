@@ -54,6 +54,11 @@ export interface JobItem {
   status?: JobStatus | string;
   tenant_schema?: string;
   updated_articles?: number;
+  web_collect_stage?: null | string;
+  web_collect_fetch_total?: null | number;
+  web_collect_fetch_completed?: null | number;
+  web_collect_ingest_total?: null | number;
+  web_collect_ingest_completed?: null | number;
 }
 
 export interface MetricsSummaryTenant {

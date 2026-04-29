@@ -71,6 +71,46 @@ function formatPercent(value?: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function formatProgress(row: JobItem): string {
+  // 网页采集：优先显示当前阶段的 x/y；进入 ingest 阶段后附带新增/更新计数
+  if (row.job_type === 'web_collect') {
+    const stage = row.web_collect_stage;
+    const fetchDone = row.web_collect_fetch_completed;
+    const fetchTotal = row.web_collect_fetch_total;
+    const ingestDone = row.web_collect_ingest_completed;
+    const ingestTotal = row.web_collect_ingest_total;
+    const ins = row.inserted_articles;
+    const upd = row.updated_articles;
+
+    const insUpdSuffix =
+      ins != null || upd != null ? ` · 新增${ins ?? 0}/更新${upd ?? 0}` : '';
+
+    if (stage === 'fetching' && fetchTotal != null) {
+      return `抓取 ${fetchDone ?? 0}/${fetchTotal}`;
+    }
+    if (stage === 'ingesting' && ingestTotal != null) {
+      return `解析 ${ingestDone ?? 0}/${ingestTotal}${insUpdSuffix}`;
+    }
+    // 终态：优先显示解析总数，其次抓取总数
+    if (ingestTotal != null) {
+      return `解析 ${ingestDone ?? 0}/${ingestTotal}${insUpdSuffix}`;
+    }
+    if (fetchTotal != null) {
+      return `抓取 ${fetchDone ?? 0}/${fetchTotal}`;
+    }
+    return '--';
+  }
+
+  // 文章批量解析：沿用已有 batch_parse_* 字段
+  if (row.job_type === 'article_batch_parse') {
+    const total = (row as any).batch_parse_total;
+    const done = (row as any).batch_parse_processed_count;
+    if (total != null) return `解析 ${done ?? 0}/${total}`;
+  }
+
+  return '--';
+}
+
 function canCancel(status?: JobStatus | string) {
   return ['queued', 'deferred', 'started'].includes(status ?? '');
 }
@@ -140,11 +180,13 @@ const columns: VxeTableGridOptions['columns'] = [
         excel_import: 'Excel导入',
         manual_create: '手动创建',
         schedule_run: '调度执行',
+        seed_discovery: '种子发现',
       };
       return sourceMap[cellValue ?? ''] || cellValue || '--';
     },
   },
   { field: 'status', title: '状态', width: 100, slots: { default: 'status' } },
+  { field: 'progress', title: '进度', width: 220, slots: { default: 'progress' } },
   { field: 'alert_level', title: '风险等级', width: 100, slots: { default: 'alertLevel' } },
   { field: 'quality_score_avg', title: '质量均分', width: 100 },
   { field: 'low_quality_ratio', title: '低质占比', width: 100, slots: { default: 'lowQualityRatio' } },
@@ -524,6 +566,9 @@ onBeforeUnmount(() => {
         <Tag :color="statusColorMap[row.status ?? ''] ?? 'default'">
           {{ statusLabelMap[row.status ?? ''] ?? row.status ?? '--' }}
         </Tag>
+      </template>
+      <template #progress="{ row }">
+        {{ formatProgress(row) }}
       </template>
       <template #alertLevel="{ row }">
         <Tag
