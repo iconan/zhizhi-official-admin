@@ -40,6 +40,7 @@ export interface JobItem {
   low_quality_rows?: number;
   quality_score_avg?: number;
   rows?: number;
+  skipped_articles?: number;
   s2_annotations_count?: number;
   s2_batches?: number;
   s2_deduplicated_items?: number;

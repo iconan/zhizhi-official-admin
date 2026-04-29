@@ -81,9 +81,12 @@ function formatProgress(row: JobItem): string {
     const ingestTotal = row.web_collect_ingest_total;
     const ins = row.inserted_articles;
     const upd = row.updated_articles;
+    const skp = row.skipped_articles;
 
     const insUpdSuffix =
-      ins != null || upd != null ? ` · 新增${ins ?? 0}/更新${upd ?? 0}` : '';
+      ins != null || upd != null || skp != null
+        ? ` · 新增${ins ?? 0}/更新${upd ?? 0}/跳过${skp ?? 0}`
+        : '';
 
     if (stage === 'fetching' && fetchTotal != null) {
       return `抓取 ${fetchDone ?? 0}/${fetchTotal}`;
