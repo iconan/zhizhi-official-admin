@@ -568,7 +568,7 @@ onBeforeUnmount(() => {
         </Tag>
       </template>
       <template #progress="{ row }">
-        {{ formatProgress(row) }}
+        {{ formatProgress(row as JobItem) }}
       </template>
       <template #alertLevel="{ row }">
         <Tag
