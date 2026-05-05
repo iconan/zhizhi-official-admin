@@ -4,14 +4,11 @@ import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 import { Page, useVbenDrawer } from '@vben/common-ui';
 import { Button, Tag, Tooltip, message } from 'ant-design-vue';
 import { Copy } from 'lucide-vue-next';
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import {
-  fetchJobs,
-  type SeedDiscoveryJobItem,
-} from '#/api/seed_discovery';
+import { fetchJobs } from '#/api/seed_discovery';
 
 import RunDrawer from './modules/run-drawer.vue';
 
@@ -130,7 +127,7 @@ function openRunDrawer() {
   runDrawerApi.setData({}).open();
 }
 
-function viewSeeds(row: SeedDiscoveryJobItem) {
+function viewSeeds(row: Record<string, any>) {
   router.push({
     path: '/seed-discovery/seeds',
     query: { job_id: row.job_id },

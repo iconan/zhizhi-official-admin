@@ -42,6 +42,9 @@ export interface SeedDiscoverySeedItem {
   enqueued_job_id?: string | null;
   note?: string | null;
   created_at?: string | null;
+  llm_score?: number | null;
+  llm_reason?: string | null;
+  content_type?: string | null;
 }
 
 export interface SeedDiscoveryRunRequest {
@@ -125,6 +128,9 @@ export async function fetchSeeds(params: {
   source_name?: string;
   topic?: string;
   status?: string;
+  content_type?: string;
+  min_llm_score?: number;
+  exclude_blacklist?: boolean;
   limit?: number;
   offset?: number;
 } = {}) {
