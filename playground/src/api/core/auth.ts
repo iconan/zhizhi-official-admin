@@ -56,7 +56,12 @@ export async function refreshTokenApi(refreshToken?: string) {
   }>(
     `${IAM_PREFIX}/refresh`,
     refreshToken ? { refresh_token: refreshToken } : null,
-    { withCredentials: true },
+    {
+      withCredentials: true,
+      // 刷新失败由全局 401 拦截器统一处理（跳转登录），
+      // 不要在这里再弹出 “请求错误 / 服务器内部错误” 的 toast。
+      errorMessageMode: 'none',
+    } as any,
   );
 
   // baseRequestClient 返回完整 axios 响应，token 在 res.data.data 中

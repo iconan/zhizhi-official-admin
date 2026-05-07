@@ -119,11 +119,17 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   // 通用的错误处理,如果没有进入上面的错误处理逻辑，就会进入这里
   client.addResponseInterceptor(
     errorMessageResponseInterceptor((msg: string, error) => {
+      const status = error?.response?.status;
+      // 401 已经由认证拦截器处理（刷新或跳转登录），这里不再弹 toast，
+      // 避免出现 “请求错误 / 服务器内部错误 / 刷新凭证无效” 这类对用户无意义的提示。
+      if (status === 401) {
+        return;
+      }
       const responseData = error?.response?.data ?? {};
       // 后端统一返回 msg，若不存在再回退 error/message
       const errorMessage =
         responseData?.msg ?? responseData?.error ?? responseData?.message ?? '';
-      message.error(errorMessage || msg);
+      void message.error(errorMessage || msg);
     }),
   );
 
