@@ -24,8 +24,35 @@ import {
 import { createJob, importExcelJobs } from '#/api/etl/jobs';
 import { fetchWebSources } from '#/api/etl/sources';
 import { fetchTenants } from '#/api/iam/tenant';
+import UrlRecommenderDrawer from './url-recommender-drawer.vue';
 
 const emit = defineEmits<{ success: [] }>();
+
+const urlRecommenderRef = ref<InstanceType<typeof UrlRecommenderDrawer> | null>(null);
+
+function openUrlRecommender() {
+  // useVbenDrawer 暴露 .drawerApi.open()；这里用通用调用方式
+  const ref_ = urlRecommenderRef.value as any;
+  if (ref_?.open) {
+    ref_.open();
+  } else if (ref_?.drawerApi?.open) {
+    ref_.drawerApi.open();
+  }
+}
+
+function handleRecommenderApply(urls: string[]) {
+  if (!urls || urls.length === 0) return;
+  const existing = parseSeedUrls(webForm.value.seed_urls_text);
+  const seen = new Set(existing);
+  const merged = [...existing];
+  for (const u of urls) {
+    if (!seen.has(u)) {
+      seen.add(u);
+      merged.push(u);
+    }
+  }
+  webForm.value.seed_urls_text = merged.join('\n');
+}
 
 const loadingSources = ref(false);
 const loadingTenants = ref(false);
@@ -299,6 +326,10 @@ async function submitWeb() {
                   />
                 </Form.Item>
                 <Form.Item label="起始 URL 列表" required>
+                  <div class="mb-2 flex items-center justify-between">
+                    <span class="text-xs text-[var(--ant-color-text-description)]">每行一个 URL，仅支持 http(s)；最多 200 条。</span>
+                    <Button size="small" @click="openUrlRecommender">从官媒搜 URL</Button>
+                  </div>
                   <Input.TextArea
                     v-model:value="webForm.seed_urls_text"
                     :rows="4"
@@ -360,5 +391,6 @@ async function submitWeb() {
         </Row>
       </template>
     </div>
+    <UrlRecommenderDrawer ref="urlRecommenderRef" @apply="handleRecommenderApply" />
   </Drawer>
 </template>
