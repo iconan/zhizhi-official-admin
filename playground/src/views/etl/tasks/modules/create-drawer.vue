@@ -391,6 +391,8 @@ async function submitWeb() {
         </Row>
       </template>
     </div>
+    <!-- 放回父 Drawer 内部以保持单根模板（vben connectedComponent 包装器要求）。
+         推荐抽屉已不再使用 useVbenDrawer，关闭事件不会传染到父抽屉。-->
     <UrlRecommenderDrawer ref="urlRecommenderRef" @apply="handleRecommenderApply" />
   </Drawer>
 </template>

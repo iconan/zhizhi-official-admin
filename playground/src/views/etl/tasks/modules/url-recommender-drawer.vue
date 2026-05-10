@@ -1,12 +1,12 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
 
-import { useVbenDrawer } from '@vben/common-ui';
 import {
   Alert,
   Button,
   Card,
   DatePicker,
+  Drawer,
   Form,
   Input,
   message,
@@ -56,19 +56,25 @@ const tableColumns = [
   { title: '发布日期', dataIndex: 'published_at', width: 130 },
 ];
 
+function stopRowSelectionPropagation(event: Event) {
+  // 点击标题链接时不要触发行选中
+  event.stopPropagation();
+}
+
 const selectedCount = computed(() => selectedUrls.value.length);
 
-const [Drawer, drawerApi] = useVbenDrawer({
-  footer: false,
-  onCancel() {
-    drawerApi.close();
-  },
-  onOpenChange(isOpen) {
-    if (isOpen) {
-      reset();
-    }
-  },
-});
+// 不使用 useVbenDrawer：该包装在作为 connectedComponent 子项时会被错绑，
+// 导致“创建任务”抽屉打开的却是该子抽屉。改用原生 antd Drawer + v-model。
+const open = ref(false);
+
+function openDrawer() {
+  reset();
+  open.value = true;
+}
+
+function closeDrawer() {
+  open.value = false;
+}
 
 function reset() {
   form.value = {
@@ -124,7 +130,7 @@ function handleApply() {
   }
   emit('apply', [...selectedUrls.value]);
   message.success(`已添加 ${selectedUrls.value.length} 条 URL 到表单`);
-  drawerApi.close();
+  closeDrawer();
 }
 
 const rowSelection = computed(() => ({
@@ -136,13 +142,22 @@ const rowSelection = computed(() => ({
 
 // 暴露给父组件用 ref 调用打开抽屉
 defineExpose({
-  open: () => drawerApi.open(),
-  close: () => drawerApi.close(),
+  open: openDrawer,
+  close: closeDrawer,
 });
 </script>
 
 <template>
-  <Drawer class="w-full max-w-[1080px]" title="从官媒搜索 URL">
+  <Drawer
+    v-model:open="open"
+    title="从官媒搜索 URL"
+    :width="1080"
+    :z-index="2000"
+    :mask="false"
+    :mask-closable="false"
+    destroy-on-close
+    @close="closeDrawer"
+  >
     <div class="px-4 pb-4 pt-2">
       <Card :bordered="false" class="mb-3 rounded-2xl shadow-sm">
         <Form layout="vertical">
@@ -220,6 +235,20 @@ defineExpose({
           size="small"
           bordered
         >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.dataIndex === 'title'">
+              <a
+                :href="(record as UrlRecommenderCandidate).url"
+                :title="(record as UrlRecommenderCandidate).url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-[var(--ant-color-link)] hover:underline"
+                @click="stopRowSelectionPropagation"
+              >
+                {{ (record as UrlRecommenderCandidate).title }}
+              </a>
+            </template>
+          </template>
           <template #emptyText>
             <div class="py-6 text-xs text-[var(--ant-color-text-description)]">
               {{ searched ? '没有命中的候选，可调整关键词 / 日期后再次搜索' : '请先填写关键词后点击"搜索"' }}
