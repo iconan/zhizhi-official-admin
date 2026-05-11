@@ -183,7 +183,6 @@ const columns: VxeTableGridOptions['columns'] = [
         excel_import: 'Excel导入',
         manual_create: '手动创建',
         schedule_run: '调度执行',
-        seed_discovery: '种子发现',
       };
       return sourceMap[cellValue ?? ''] || cellValue || '--';
     },
