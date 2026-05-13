@@ -9,7 +9,7 @@ import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { createOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
 import { fetchAdminUsers, type IamAdminUser } from '#/api/iam/user';
-import { getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
+import { clearTreeDataCache, getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
 
 type OrgStatus = IamOrg['status'];
 
@@ -20,6 +20,7 @@ const ownerOptions = ref<{ label: string; value: string }[]>([]);
 const orgOptions = ref<{ label: string; value: string }[]>([]); // active orgs for form selects
 const orgOptionsAll = ref<{ label: string; value: string }[]>([]); // all orgs for label mapping
 const orgTreeOptions = ref<any[]>([]);
+const rawOrgTreeOptions = ref<any[]>([]);
 
 const [OrgForm, orgFormApi] = useVbenForm({
   showDefaultActions: false,
@@ -184,6 +185,17 @@ onMounted(async () => {
   nextTick(() => gridApi.query());
 });
 
+function filterSelfFromTree(nodes: any[], excludeId: string): any[] {
+  return nodes
+    .filter((n) => n.value !== excludeId)
+    .map((n) => {
+      if (n.children?.length) {
+        return { ...n, children: filterSelfFromTree(n.children, excludeId) };
+      }
+      return n;
+    });
+}
+
 function openDrawer(row?: IamOrg) {
   currentOrg.value = row ?? null;
   orgDrawerApi.open();
@@ -191,6 +203,9 @@ function openDrawer(row?: IamOrg) {
     orgFormApi.resetForm();
     if (row) {
       orgFormApi.setValues({ ...row });
+      orgTreeOptions.value = filterSelfFromTree(rawOrgTreeOptions.value, row.org_id);
+    } else {
+      orgTreeOptions.value = rawOrgTreeOptions.value;
     }
   });
 }
@@ -219,6 +234,8 @@ async function onSubmitOrg() {
       message.success('创建成功');
     }
     orgDrawerApi.close();
+    clearTreeDataCache();
+    await loadSelectOptions();
     gridApi.query();
   } finally {
     orgDrawerApi.unlock();
@@ -236,7 +253,8 @@ async function loadSelectOptions() {
     }));
     orgOptions.value = await getActiveOrgOptions();
     orgOptionsAll.value = await getAllOrgOptions();
-    orgTreeOptions.value = await getActiveOrgTreeOptions();
+    rawOrgTreeOptions.value = await getActiveOrgTreeOptions();
+    orgTreeOptions.value = rawOrgTreeOptions.value;
   } catch (error) {
     // 错误提示由全局拦截器统一处理
     console.error('[IAM Org] load select options failed', error);
