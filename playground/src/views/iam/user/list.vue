@@ -340,11 +340,18 @@ onMounted(async () => {
 
 async function loadRoleOptionsForOrg(orgId?: null | string) {
   try {
-    const { items: list } = await fetchRoles({
-      limit: 200,
-      offset: 0,
-      org_id: orgId || undefined,
-    });
+    let list: IamRole[];
+    if (!orgId) {
+      // 未选组织：请求所有角色，前端只显示系统角色
+      const res = await fetchRoles({ limit: 200, offset: 0 });
+      list = res.items.filter((item: IamRole) => item.is_system);
+    } else {
+      // 选了组织：请求该组织角色，前端合并系统角色
+      const orgRes = await fetchRoles({ limit: 200, offset: 0, org_id: orgId });
+      const allRes = await fetchRoles({ limit: 200, offset: 0 });
+      const systemRoles = allRes.items.filter((item: IamRole) => item.is_system);
+      list = [...orgRes.items, ...systemRoles];
+    }
     const activeList = list.filter((item: IamRole) => item.status === 'active');
     roleOptions.value = activeList.map((item: IamRole) => ({
       label: `${item.code}（${item.name}）`,

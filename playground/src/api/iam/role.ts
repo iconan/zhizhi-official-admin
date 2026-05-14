@@ -9,6 +9,7 @@ export interface IamRole {
   description?: string | null;
   org_id?: string | null;
   status: 'active' | 'disabled';
+  is_system?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -26,6 +27,7 @@ export interface SaveRoleInput {
   name?: string;
   description?: string | null;
   org_id?: string | null;
+  is_system?: boolean;
 }
 
 export async function fetchRoles(params: RoleQuery = {}) {

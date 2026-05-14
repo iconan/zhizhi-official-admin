@@ -61,10 +61,26 @@ const [RoleForm, roleFormApi] = useVbenForm({
       rules: z.string().max(200, '过长').optional(),
     },
     {
+      component: 'Switch',
+      fieldName: 'is_system',
+      label: '系统角色',
+      defaultValue: false,
+      componentProps: {
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+      },
+    },
+    {
       component: 'TreeSelect',
       fieldName: 'org_id',
       label: '所属组织',
       defaultValue: null,
+      dependencies: {
+        show(values: any) {
+          return !values?.is_system;
+        },
+        triggerFields: ['is_system'],
+      },
       componentProps: {
         allowClear: true,
         showSearch: true,
@@ -79,7 +95,8 @@ const [RoleForm, roleFormApi] = useVbenForm({
       rules: z
         .string({ required_error: '请选择所属组织' })
         .min(1, '请选择所属组织')
-        .max(200, '过长'),
+        .max(200, '过长')
+        .optional(),
     },
   ],
 });
@@ -126,9 +143,14 @@ const onActionClick: OnActionClickFn<IamRole> = ({ code, row }) => {
   }
 };
 
-function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
+function getColumns() {
   return [
-    { field: 'name', title: '角色名称', minWidth: 160 },
+    {
+      field: 'name',
+      title: '角色名称',
+      minWidth: 200,
+      slots: { default: 'name' },
+    },
     { field: 'code', title: '编码', minWidth: 160 },
     { field: 'description', title: '描述', minWidth: 220 },
     {
@@ -148,24 +170,16 @@ function getColumns(onActionClickFn: OnActionClickFn<IamRole>) {
     {
       field: 'status',
       title: '状态',
-      width: 120,
+      width: 160,
       slots: { default: 'status' },
     },
     {
       title: '操作',
       field: 'operation',
       fixed: 'right',
-      width: 240,
+      width: 200,
       showOverflow: false,
-      cellRender: {
-        name: 'CellOperation',
-        options: [
-          { code: 'bind', text: '绑定权限' },
-          { code: 'status', text: '切换状态' },
-          'edit',
-        ],
-        attrs: { onClick: onActionClickFn },
-      },
+      slots: { default: 'operation' },
     },
   ];
 }
@@ -219,7 +233,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
     submitOnChange: true,
   },
   gridOptions: {
-    columns: getColumns(onActionClick),
+    columns: getColumns(),
     height: 'auto',
     keepSource: true,
     pagerConfig: { enabled: true, pageSize: 20, pageSizes: [10, 20, 50, 100] },
@@ -340,6 +354,9 @@ async function onSubmitRole() {
   if (!valid) return;
   formDrawerApi.lock();
   const values = await roleFormApi.getValues<IamRole>();
+  if (values.is_system) {
+    (values as any).org_id = undefined;
+  }
   try {
     if (currentRole.value?.role_id) {
       await updateRole(currentRole.value.role_id, values as any);
@@ -364,6 +381,10 @@ function renderStatus(status: RoleStatus) {
 }
 
 function toggleStatus(row: IamRole) {
+  if (row.is_system) {
+    message.warning('系统内置角色不允许禁用');
+    return;
+  }
   const nextStatus: RoleStatus =
     row.status === 'active' ? 'disabled' : 'active';
   const hide = message.loading({ content: '正在更新状态', duration: 0 });
@@ -439,6 +460,10 @@ async function onSubmitBind() {
         <Button type="primary" @click="onCreate">新增角色</Button>
       </template>
 
+      <template #name="{ row }">
+        <span>{{ row.name }}</span>
+        <Tag v-if="row.is_system" color="blue" style="margin-left: 8px">系统</Tag>
+      </template>
       <template #status="{ row }">
         <Tag :color="renderStatus(row.status).color">
           {{ renderStatus(row.status).text }}
@@ -460,6 +485,22 @@ async function onSubmitBind() {
             {{ permissionLabel(p) }}
           </Tag>
         </div>
+      </template>
+      <template #operation="{ row }">
+        <Button size="small" type="link" @click="onActionClick({ code: 'bind', row })">
+          绑定权限
+        </Button>
+        <Button
+          v-if="!row.is_system"
+          size="small"
+          type="link"
+          @click="onActionClick({ code: 'status', row })"
+        >
+          {{ row.status === 'active' ? '禁用' : '启用' }}
+        </Button>
+        <Button size="small" type="link" @click="onActionClick({ code: 'edit', row })">
+          修改
+        </Button>
       </template>
     </Grid>
   </Page>
