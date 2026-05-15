@@ -2,12 +2,12 @@
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
-import { Button, message, Tag } from 'ant-design-vue';
+import { Button, message, Modal, Tag } from 'ant-design-vue';
 import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { countOrgUsers, createOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
+import { countOrgUsers, createOrg, deleteOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
 import { fetchAdminUsers, type IamAdminUser } from '#/api/iam/user';
 import { clearTreeDataCache, getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
 
@@ -100,6 +100,9 @@ const onActionClick: OnActionClickFn<IamOrg> = ({ code, row }) => {
     case 'status':
       toggleStatus(row);
       break;
+    case 'delete':
+      handleDelete(row);
+      break;
     default:
       break;
   }
@@ -131,13 +134,14 @@ function getColumns(onActionClickFn: OnActionClickFn<IamOrg>) {
       title: '操作',
       field: 'operation',
       fixed: 'right',
-      width: 220,
+      width: 280,
       showOverflow: false,
       cellRender: {
         name: 'CellOperation',
         options: [
           { code: 'status', text: '切换状态' },
           'edit',
+          { code: 'delete', text: '删除' },
         ],
         attrs: { onClick: onActionClickFn },
       },
@@ -312,6 +316,39 @@ async function toggleStatus(row: IamOrg) {
   };
 
   doUpdate();
+}
+
+async function handleDelete(row: IamOrg) {
+  try {
+    const userCount = await countOrgUsers(row.org_id);
+    const messageContent = userCount > 0
+      ? `该组织下有 ${userCount} 个用户，删除后这些用户将被一并删除，同时该组织下的角色也将被删除，确认继续？`
+      : '删除该组织后，该组织下的角色也将被删除，确认继续？';
+
+    Modal.confirm({
+      title: '确认删除',
+      content: messageContent,
+      okText: '确认',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        const hide = message.loading({ content: '正在删除', duration: 0 });
+        deleteOrg(row.org_id)
+          .then(() => {
+            message.success('删除成功');
+            gridApi.query();
+            clearTreeDataCache();
+          })
+          .catch((error) => {
+            console.error('[IAM Org] delete failed', error);
+          })
+          .finally(() => hide());
+      },
+    });
+  } catch (error) {
+    console.error('[IAM Org] count org users failed', error);
+    message.error('检查用户数量失败，请稍后重试');
+  }
 }
 </script>
 

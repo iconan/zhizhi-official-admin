@@ -55,3 +55,7 @@ export async function countOrgUsers(orgId: string) {
   const res = await requestClient.get(`${IAM_PREFIX}/organizations/${orgId}/users-count`);
   return res as number;
 }
+
+export async function deleteOrg(orgId: string) {
+  return requestClient.delete(`${IAM_PREFIX}/organizations/${orgId}`);
+}
