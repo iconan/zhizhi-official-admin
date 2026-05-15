@@ -7,7 +7,7 @@ import { nextTick, onMounted, ref } from 'vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import { createOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
+import { countOrgUsers, createOrg, fetchOrgs, type IamOrg, updateOrg, updateOrgStatus } from '#/api/iam/org';
 import { fetchAdminUsers, type IamAdminUser } from '#/api/iam/user';
 import { clearTreeDataCache, getActiveOrgOptions, getActiveOrgTreeOptions, getAllOrgOptions } from '#/store/tree-data';
 
@@ -279,8 +279,23 @@ function renderStatus(status: OrgStatus) {
   return map[status];
 }
 
-function toggleStatus(row: IamOrg) {
+async function toggleStatus(row: IamOrg) {
   const nextStatus: OrgStatus = row.status === 'active' ? 'disabled' : 'active';
+
+  // 如果是禁用操作，先检查是否有用户
+  if (nextStatus === 'disabled') {
+    try {
+      const userCount = await countOrgUsers(row.org_id);
+      if (userCount > 0) {
+        message.warning(`该组织下有 ${userCount} 个用户，不允许禁用`);
+        return;
+      }
+    } catch (error) {
+      console.error('[IAM Org] count org users failed', error);
+      message.error('检查用户数量失败，请稍后重试');
+      return;
+    }
+  }
 
   const doUpdate = () => {
     const hide = message.loading({ content: '正在更新状态', duration: 0 });

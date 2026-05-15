@@ -58,6 +58,11 @@ export async function updateRoleStatus(roleId: string, status: 'active' | 'disab
   return requestClient.post(`${IAM_PREFIX}/roles/${roleId}/status`, { status });
 }
 
+export async function countRoleUsers(roleId: string) {
+  const res = await requestClient.get(`${IAM_PREFIX}/roles/${roleId}/users-count`);
+  return res as number;
+}
+
 export async function bindRolePermissions(roleId: string, permissionCodes: string[]) {
   return requestClient.post(`${IAM_PREFIX}/roles/${roleId}/bind-permissions`, {
     permission_codes: permissionCodes,

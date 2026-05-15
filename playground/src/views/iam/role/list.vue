@@ -7,13 +7,14 @@ import { nextTick, onMounted, ref } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
-import { Button, message, Tag } from 'ant-design-vue';
+import { Button, message, Modal, Tag } from 'ant-design-vue';
 
 import { useVbenForm, z } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import { fetchPermissions } from '#/api/iam/permission';
 import {
   bindRolePermissions,
+  countRoleUsers,
   createRole,
   fetchRoleDetail,
   fetchRoles,
@@ -380,13 +381,46 @@ function renderStatus(status: RoleStatus) {
   return map[status];
 }
 
-function toggleStatus(row: IamRole) {
+async function toggleStatus(row: IamRole) {
   if (row.is_system) {
     message.warning('系统内置角色不允许禁用');
     return;
   }
   const nextStatus: RoleStatus =
     row.status === 'active' ? 'disabled' : 'active';
+
+  // 如果是禁用操作，先检查是否有用户
+  if (nextStatus === 'disabled') {
+    try {
+      const userCount = await countRoleUsers(row.role_id);
+      if (userCount > 0) {
+        Modal.confirm({
+          title: '确认禁用',
+          content: `该角色下有 ${userCount} 个用户，禁用后这些用户将失去该角色权限，确认继续？`,
+          okText: '确认',
+          cancelText: '取消',
+          onOk: async () => {
+            const hide = message.loading({ content: '正在更新状态', duration: 0 });
+            updateRoleStatus(row.role_id, nextStatus)
+              .then(() => {
+                message.success('状态已更新');
+                gridApi.query();
+              })
+              .catch((error) => {
+                console.error('[IAM Role] update status failed', error);
+              })
+              .finally(() => hide());
+          },
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('[IAM Role] count role users failed', error);
+      message.error('检查用户数量失败，请稍后重试');
+      return;
+    }
+  }
+
   const hide = message.loading({ content: '正在更新状态', duration: 0 });
   updateRoleStatus(row.role_id, nextStatus)
     .then(() => {
@@ -394,7 +428,6 @@ function toggleStatus(row: IamRole) {
       gridApi.query();
     })
     .catch((error) => {
-      // 错误提示由全局拦截器统一处理
       console.error('[IAM Role] update status failed', error);
     })
     .finally(() => hide());

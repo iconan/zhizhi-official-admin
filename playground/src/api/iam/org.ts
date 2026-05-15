@@ -50,3 +50,8 @@ export async function updateOrg(orgId: string, data: SaveOrgInput) {
 export async function updateOrgStatus(orgId: string, status: 'active' | 'disabled') {
   return requestClient.post(`${IAM_PREFIX}/organizations/${orgId}/status`, { status });
 }
+
+export async function countOrgUsers(orgId: string) {
+  const res = await requestClient.get(`${IAM_PREFIX}/organizations/${orgId}/users-count`);
+  return res as number;
+}
