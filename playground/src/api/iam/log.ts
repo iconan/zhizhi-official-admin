@@ -12,6 +12,7 @@ export interface AdminLogItem {
   detail?: Record<string, any> | null;
   ip_address?: string | null;
   created_at?: string | null;
+  permission_name?: string | null; // 权限点名称，作为中文描述
 }
 
 export interface AdminLogQuery {

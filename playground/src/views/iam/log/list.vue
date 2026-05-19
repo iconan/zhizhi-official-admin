@@ -21,8 +21,8 @@ function openDetail(row: AdminLogItem) {
 function getColumns() {
   return [
     { field: 'admin_name', title: '操作人', minWidth: 120 },
-    { field: 'action', title: '操作动作', minWidth: 160 },
-    { field: 'target_type', title: '操作对象', minWidth: 140 },
+    { field: 'action', title: '操作动作', minWidth: 160, formatter: ({ row }: { row: AdminLogItem }) => row.permission_name || row.action },
+    { field: 'target_type', title: '操作对象', minWidth: 140, formatter: ({ row }: { row: AdminLogItem }) => row.permission_name ? row.permission_name.split(' ')[0] : row.target_type },
     { field: 'target_id', title: '对象ID', minWidth: 200, showOverflow: true },
     { field: 'ip_address', title: 'IP地址', minWidth: 140 },
     { field: 'created_at', title: '操作时间', minWidth: 180, sortable: true },
