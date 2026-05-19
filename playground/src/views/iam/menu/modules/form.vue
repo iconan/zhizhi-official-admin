@@ -4,6 +4,7 @@ import type { VbenFormSchema } from '#/adapter/form';
 import { computed, onMounted, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
+import { message } from 'ant-design-vue';
 import { useVbenForm, z } from '#/adapter/form';
 import { componentKeys } from '#/router/routes';
 
@@ -200,6 +201,25 @@ async function onSubmit() {
   const values = await formApi.getValues<IamMenu>();
   const payload = { ...values } as any;
 
+  // 校验：directory 类型不能有 component、external_url、permission_code
+  if (payload.menu_type === 'directory') {
+    if (payload.component) {
+      message.error('目录类型不能有页面组件，请选择菜单类型');
+      drawerApi.unlock();
+      return;
+    }
+    if (payload.external_url) {
+      message.error('目录类型不能有外链地址，请选择外链类型');
+      drawerApi.unlock();
+      return;
+    }
+    if (payload.permission_code) {
+      message.error('目录类型不能有权限码，请选择菜单或按钮类型');
+      drawerApi.unlock();
+      return;
+    }
+  }
+
   // external_url only for link, remove otherwise
   if (payload.menu_type !== 'link') {
     payload.external_url = null;
@@ -214,11 +234,16 @@ async function onSubmit() {
   try {
     if (formData.value?.menu_id) {
       await updateMenu(formData.value.menu_id, payload);
+      message.success('更新成功');
     } else {
       await createMenu(payload as any);
+      message.success('创建成功');
     }
     drawerApi.close();
     emit('success');
+  } catch (error) {
+    // 错误提示由全局拦截器统一处理
+    console.error('[IAM Menu] save failed', error);
   } finally {
     drawerApi.unlock();
   }

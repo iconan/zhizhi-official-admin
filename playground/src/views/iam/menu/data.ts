@@ -1,4 +1,4 @@
-import type { VxeTableGridOptions, OnActionClickFn } from '#/adapter/vxe-table';
+import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 
 import type { MenuStatus, IamMenu } from '#/api/iam/menu';
 
@@ -22,9 +22,7 @@ function renderStatus(status: MenuStatus) {
   return map[status];
 }
 
-export function useColumns(
-  onActionClick: OnActionClickFn<IamMenu>,
-): VxeTableGridOptions<IamMenu>['columns'] {
+export function useColumns(): VxeTableGridOptions<IamMenu>['columns'] {
   return [
     {
       align: 'left',
@@ -83,20 +81,12 @@ export function useColumns(
     },
     {
       align: 'right',
-      cellRender: {
-        attrs: { onClick: onActionClick },
-        name: 'CellOperation',
-        options: [
-          { code: 'append', text: '新增下级' },
-          'edit',
-          'delete',
-        ],
-      },
       field: 'operation',
       fixed: 'right',
       showOverflow: false,
       title: '操作',
       width: 180,
+      slots: { default: 'operation' },
     },
   ];
 }
