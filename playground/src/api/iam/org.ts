@@ -11,6 +11,7 @@ export interface IamOrg {
   credit_code?: string | null;
   max_members?: number | null;
   entitled_regions?: string[];
+  is_system_default?: boolean;
   created_at?: string;
   updated_at?: string;
 }

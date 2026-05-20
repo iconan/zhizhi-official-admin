@@ -319,6 +319,11 @@ async function toggleStatus(row: IamOrg) {
 }
 
 async function handleDelete(row: IamOrg) {
+  if (row.is_system_default) {
+    message.error('系统默认组织不允许删除');
+    return;
+  }
+
   try {
     const userCount = await countOrgUsers(row.org_id);
     const messageContent = userCount > 0

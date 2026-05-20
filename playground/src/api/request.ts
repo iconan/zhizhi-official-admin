@@ -120,22 +120,35 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
   client.addResponseInterceptor(
     errorMessageResponseInterceptor((msg: string, error) => {
       const status = error?.response?.status;
-      // 后端统一响应体中的业务码（如 40101 = 认证失败）
-      // 注意：doRefreshToken 失败时 error 已被 RequestClient.request() 的 catch
-      // 转换为后端 body 对象（丢失了 response.status），需要额外通过 bizCode 判断。
-      const bizCode: number | undefined =
-        error?.response?.data?.code ?? error?.code;
+      // 兼容两种情况：
+      // 1) 标准 axios error：body 在 error.response.data 中
+      // 2) RequestClient.request catch 后抛出的纯 body 对象：error 本身就是 {code, msg, data}
+      const isBody =
+        error &&
+        typeof error === 'object' &&
+        !error.response &&
+        'code' in error &&
+        'msg' in error;
+      const responseData = isBody ? error : (error?.response?.data ?? {});
+      const bizCode: number | undefined = responseData?.code ?? error?.code;
+
       // 401 已经由认证拦截器处理（刷新或跳转登录），这里不再弹 toast，
       // 避免出现认证相关错误对用户无意义的提示。
+      // 另外，当 error 被转换为纯 body 对象（无 response）且业务码为认证类时，
+      // 说明是 refresh token 链路抛出的，同样静默。
+      if (status === 401) {
+        return;
+      }
       if (
-        status === 401 ||
-        (typeof bizCode === 'number' && bizCode >= 40100 && bizCode <= 40199)
+        typeof status !== 'number' &&
+        typeof bizCode === 'number' &&
+        bizCode >= 40100 &&
+        bizCode <= 40199
       ) {
         return;
       }
-      const responseData = error?.response?.data ?? {};
+
       // 后端统一返回 msg，若不存在再回退 error/message
-      // 同时兼容 error 本身就是后端 body 的情况（refresh 失败路径）
       const errorMessage =
         responseData?.msg ??
         responseData?.error ??
