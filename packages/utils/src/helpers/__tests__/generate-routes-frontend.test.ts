@@ -38,14 +38,17 @@ const mockRoutes = [
 
 describe('hasAuthority', () => {
   it('should return true if there is no authority defined', () => {
+    // @ts-ignore
     expect(hasAuthority(mockRoutes[2], ['admin'])).toBe(true);
   });
 
   it('should return true if the user has the required authority', () => {
+    // @ts-ignore
     expect(hasAuthority(mockRoutes[0], ['admin'])).toBe(true);
   });
 
   it('should return false if the user does not have the required authority', () => {
+    // @ts-ignore
     expect(hasAuthority(mockRoutes[1], ['user'])).toBe(false);
   });
 });
