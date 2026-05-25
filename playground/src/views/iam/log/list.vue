@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { VxeTableGridOptions } from '#/adapter/vxe-table';
 
-import { nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 import { Page, useVbenDrawer } from '@vben/common-ui';
 
@@ -12,6 +12,21 @@ import { type AdminLogItem, fetchAdminLogs } from '#/api/iam/log';
 
 const [DetailDrawer, detailDrawerApi] = useVbenDrawer({ destroyOnClose: true });
 const currentLog = ref<AdminLogItem | null>(null);
+const currentLogDetail = computed(() => currentLog.value?.detail ?? null);
+const snapshotBefore = computed(() => pickDetailSection(currentLogDetail.value, 'before'));
+const snapshotAfter = computed(() => pickDetailSection(currentLogDetail.value, 'after'));
+const snapshotDiff = computed(() => pickDetailSection(currentLogDetail.value, 'diff'));
+const snapshotMeta = computed(() => {
+  const detail = currentLogDetail.value;
+  if (!detail || typeof detail !== 'object') return null;
+  return {
+    intent: detail.intent,
+    status: detail.status,
+    error_message: detail.error_message,
+    changes: detail.changes,
+    request_id: detail.request_id,
+  };
+});
 
 function openDetail(row: AdminLogItem) {
   currentLog.value = row;
@@ -106,6 +121,26 @@ function formatDetail(detail: Record<string, any> | null | undefined): string {
     return String(detail);
   }
 }
+
+function pickDetailSection(detail: Record<string, any> | null | undefined, key: string) {
+  if (!detail || typeof detail !== 'object') return null;
+  const value = detail[key];
+  return value && typeof value === 'object' ? value : null;
+}
+
+function hasStructuredSnapshot(detail: Record<string, any> | null | undefined) {
+  return Boolean(pickDetailSection(detail, 'before') || pickDetailSection(detail, 'after') || pickDetailSection(detail, 'diff'));
+}
+
+function formatSnapshotValue(value: any): string {
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
 </script>
 
 <template>
@@ -138,7 +173,25 @@ function formatDetail(detail: Record<string, any> | null | undefined): string {
           {{ currentLog.created_at || '-' }}
         </DescriptionsItem>
         <DescriptionsItem label="详细信息">
-          <pre class="whitespace-pre-wrap text-xs">{{ formatDetail(currentLog.detail) }}</pre>
+          <div v-if="hasStructuredSnapshot(currentLogDetail)" class="space-y-4">
+            <div v-if="snapshotBefore">
+              <div class="mb-2 text-xs font-medium text-gray-500">提交前</div>
+              <pre class="whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs">{{ formatSnapshotValue(snapshotBefore) }}</pre>
+            </div>
+            <div v-if="snapshotAfter">
+              <div class="mb-2 text-xs font-medium text-gray-500">提交后</div>
+              <pre class="whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs">{{ formatSnapshotValue(snapshotAfter) }}</pre>
+            </div>
+            <div v-if="snapshotDiff">
+              <div class="mb-2 text-xs font-medium text-gray-500">变更项</div>
+              <pre class="whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs">{{ formatSnapshotValue(snapshotDiff) }}</pre>
+            </div>
+            <div v-if="snapshotMeta?.intent || snapshotMeta?.status || snapshotMeta?.error_message">
+              <div class="mb-2 text-xs font-medium text-gray-500">附加信息</div>
+              <pre class="whitespace-pre-wrap rounded bg-gray-50 p-3 text-xs">{{ formatSnapshotValue(snapshotMeta) }}</pre>
+            </div>
+          </div>
+          <pre v-else class="whitespace-pre-wrap text-xs">{{ formatDetail(currentLogDetail) }}</pre>
         </DescriptionsItem>
       </Descriptions>
     </DetailDrawer>
