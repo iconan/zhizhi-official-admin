@@ -31,6 +31,7 @@
   },
   "captcha": {
     "title": "Please complete the security verification",
+    "loading": "Loading captcha...",
     "sliderSuccessText": "Passed",
     "sliderDefaultText": "Slider and drag",
     "alt": "Supports img tag src attribute value",

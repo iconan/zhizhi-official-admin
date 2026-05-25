@@ -16,5 +16,6 @@ test.describe('Auth Login Page Tests', () => {
   // 测试用例: 成功登录
   test('should successfully login with valid credentials', async ({ page }) => {
     await authLogin(page);
+    await expect(page).toHaveURL(/\/workspace/);
   });
 });

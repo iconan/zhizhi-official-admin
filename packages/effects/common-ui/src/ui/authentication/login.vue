@@ -76,7 +76,10 @@ async function handleSubmit() {
   }
 }
 
-function handleGo(path: string) {
+function handleGo(path?: string) {
+  if (!path) {
+    return;
+  }
   router.push(path);
 }
 
@@ -132,6 +135,12 @@ defineExpose({
         {{ $t('authentication.forgetPassword') }}
       </span>
     </div>
+
+    <!-- 第三方登录 -->
+    <slot name="third-party-login">
+      <ThirdPartyLogin v-if="showThirdPartyLogin" />
+    </slot>
+
     <VbenButton
       :class="{
         'cursor-wait': loading,
@@ -165,11 +174,6 @@ defineExpose({
         {{ $t('authentication.qrcodeLogin') }}
       </VbenButton>
     </div>
-
-    <!-- 第三方登录 -->
-    <slot name="third-party-login">
-      <ThirdPartyLogin v-if="showThirdPartyLogin" />
-    </slot>
 
     <slot name="to-register">
       <div v-if="showRegister" class="mt-3 text-center text-sm">

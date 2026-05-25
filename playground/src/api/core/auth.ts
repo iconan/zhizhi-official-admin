@@ -7,12 +7,21 @@ export namespace AuthApi {
   export interface LoginParams {
     login: string;
     password: string;
+    captcha_token?: string;
+    captcha_answer?: string;
   }
 
   /** 登录接口返回值 */
   export interface LoginResult {
     accessToken: string;
     refreshToken?: string;
+  }
+
+  /** 验证码挑战返回值 */
+  export interface CaptchaChallengeResult {
+    captchaToken: string;
+    captchaText: string;
+    ttlSeconds: number;
   }
 
   export interface RefreshTokenResult {
@@ -27,6 +36,24 @@ export namespace AuthApi {
       name: string;
     }>;
   }
+}
+
+/** 获取登录验证码挑战 */
+export async function getCaptchaChallengeApi() {
+  const res = await requestClient.get<{
+    captcha_token: string;
+    captcha_text: string;
+    ttl_seconds: number;
+  }>(`${IAM_PREFIX}/captcha/challenge`, {
+    // 验证码刷新过于频繁时由页面自己提示，避免全局拦截器再弹一次通用错误
+    errorMessageMode: 'none',
+  });
+
+  return {
+    captchaToken: res.captcha_token,
+    captchaText: res.captcha_text,
+    ttlSeconds: res.ttl_seconds,
+  } satisfies AuthApi.CaptchaChallengeResult;
 }
 
 /** 登录 */

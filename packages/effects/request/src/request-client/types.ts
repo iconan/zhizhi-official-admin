@@ -7,6 +7,11 @@ import type {
 
 type ExtendOptions<T = any> = {
   /**
+   * 错误消息展示模式。
+   * - none: 不展示全局错误提示，由调用方自行处理。
+   */
+  errorMessageMode?: 'none';
+  /**
    * 参数序列化方式。预置的有
    * - brackets: ids[]=1&ids[]=2&ids[]=3
    * - comma: ids=1,2,3

@@ -16,14 +16,14 @@ import {
   watch,
 } from 'vue';
 
-import { $t } from '@vben/locales';
-
 import SliderCaptcha from '../slider-captcha/index.vue';
 
 const props = withDefaults(defineProps<SliderTranslateCaptchaProps>(), {
   defaultTip: '',
   canvasWidth: 420,
   canvasHeight: 280,
+  pieceX: 0,
+  pieceY: 0,
   squareLength: 42,
   circleRadius: 10,
   src: '',
@@ -31,6 +31,7 @@ const props = withDefaults(defineProps<SliderTranslateCaptchaProps>(), {
 });
 
 const emit = defineEmits<{
+  refresh: [];
   success: [CaptchaVerifyPassingData];
 }>();
 
@@ -56,7 +57,6 @@ const state = reactive({
   pieceY: 0,
   moveDistance: 0,
   isPassing: false,
-  showTip: false,
 });
 
 const left = ref('0');
@@ -71,15 +71,12 @@ function setLeft(val: string) {
   left.value = val;
 }
 
-const verifyTip = computed(() => {
-  return state.isPassing
-    ? $t('ui.captcha.sliderTranslateSuccessTip', [
-        ((state.endTime - state.startTime) / 1000).toFixed(1),
-      ])
-    : $t('ui.captcha.sliderTranslateFailTip');
-});
 function handleStart() {
   state.startTime = Date.now();
+}
+
+function handleRefresh() {
+  emit('refresh');
 }
 
 function handleDragBarMove(data: SliderRotateVerifyPassingData) {
@@ -99,7 +96,6 @@ function handleDragEnd() {
   } else {
     checkPass();
   }
-  state.showTip = true;
   state.dragging = false;
 }
 
@@ -108,13 +104,21 @@ function checkPass() {
   state.endTime = Date.now();
 }
 
+defineExpose({
+  resume,
+});
+
 watch(
   () => state.isPassing,
   (isPassing) => {
     if (isPassing) {
       const { endTime, startTime } = state;
       const time = (endTime - startTime) / 1000;
-      emit('success', { isPassing, time: time.toFixed(1) });
+      emit('success', {
+        isPassing,
+        moveX: state.moveDistance,
+        time: time.toFixed(1),
+      });
     }
     modalValue.value = isPassing;
   },
@@ -140,6 +144,7 @@ function resetCanvas() {
 
 function initCanvas() {
   const { canvasWidth, canvasHeight, squareLength, circleRadius, src } = props;
+  if (!src) return;
   const puzzleCanvas = unref(puzzleCanvasRef);
   const pieceCanvas = unref(pieceCanvasRef);
   if (!puzzleCanvas || !pieceCanvas) return;
@@ -180,15 +185,19 @@ function getRandomNumberByRange(start: number, end: number) {
 
 // 绘制拼图
 function draw(ctx1: CanvasRenderingContext2D, ctx2: CanvasRenderingContext2D) {
-  const { canvasWidth, canvasHeight, squareLength, circleRadius } = props;
-  state.pieceX = getRandomNumberByRange(
-    squareLength + 2 * circleRadius,
-    canvasWidth - (squareLength + 2 * circleRadius),
-  );
-  state.pieceY = getRandomNumberByRange(
-    3 * circleRadius,
-    canvasHeight - (squareLength + 2 * circleRadius),
-  );
+  const { canvasWidth, canvasHeight, pieceX, pieceY, squareLength, circleRadius } = props;
+  state.pieceX =
+    pieceX ||
+    getRandomNumberByRange(
+      squareLength + 2 * circleRadius,
+      canvasWidth - (squareLength + 2 * circleRadius),
+    );
+  state.pieceY =
+    pieceY ||
+    getRandomNumberByRange(
+      3 * circleRadius,
+      canvasHeight - (squareLength + 2 * circleRadius),
+    );
   drawPiece(ctx1, state.pieceX, state.pieceY, CanvasOpr.Fill);
   drawPiece(ctx2, state.pieceX, state.pieceY, CanvasOpr.Clip);
 }
@@ -238,15 +247,17 @@ function drawPiece(
 }
 
 function resume() {
-  state.showTip = false;
   const basicEl = unref(slideBarRef);
   if (!basicEl) {
     return;
   }
   state.dragging = false;
   state.isPassing = false;
+  state.startTime = 0;
+  state.endTime = 0;
   state.pieceX = 0;
   state.pieceY = 0;
+  state.moveDistance = 0;
 
   basicEl.resume();
   resetCanvas();
@@ -259,15 +270,23 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative flex flex-col items-center">
+  <div
+    :data-piece-x="state.pieceX"
+    :data-piece-y="state.pieceY"
+    :style="props.wrapperStyle"
+    class="relative flex flex-col items-center"
+    name="captcha"
+  >
     <div
       class="border-border relative flex cursor-pointer overflow-hidden border shadow-md"
+      role="button"
+      tabindex="0"
+      @click="handleRefresh"
     >
       <canvas
         ref="puzzleCanvasRef"
         :width="canvasWidth"
         :height="canvasHeight"
-        @click="resume"
       ></canvas>
       <canvas
         ref="pieceCanvasRef"
@@ -275,24 +294,7 @@ onMounted(() => {
         :height="canvasHeight"
         :style="pieceStyle"
         class="absolute"
-        @click="resume"
       ></canvas>
-      <div
-        class="h-15 absolute bottom-3 left-0 z-10 block w-full text-center text-xs leading-[30px] text-white"
-      >
-        <div
-          v-if="state.showTip"
-          :class="{
-            'bg-success/80': state.isPassing,
-            'bg-destructive/80': !state.isPassing,
-          }"
-        >
-          {{ verifyTip }}
-        </div>
-        <div v-if="!state.dragging" class="bg-black/30">
-          {{ defaultTip || $t('ui.captcha.sliderTranslateDefaultTip') }}
-        </div>
-      </div>
     </div>
     <SliderCaptcha
       ref="slideBarRef"

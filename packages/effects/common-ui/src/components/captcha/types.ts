@@ -180,6 +180,14 @@ export interface SliderTranslateCaptchaProps {
    */
   circleRadius?: number;
   /**
+   * @description 服务端签发的拼图切块横坐标
+   */
+  pieceX?: number;
+  /**
+   * @description 服务端签发的拼图切块纵坐标
+   */
+  pieceY?: number;
+  /**
    * @description 图片的地址
    */
   src?: string;
@@ -192,11 +200,16 @@ export interface SliderTranslateCaptchaProps {
    * @description 默认提示文本
    */
   defaultTip?: string;
+  /**
+   * @description 包裹验证码的容器样式
+   */
+  wrapperStyle?: CSSProperties;
 }
 
 export interface CaptchaVerifyPassingData {
   isPassing: boolean;
   time: number | string;
+  moveX?: number;
 }
 
 export interface SliderCaptchaActionType {

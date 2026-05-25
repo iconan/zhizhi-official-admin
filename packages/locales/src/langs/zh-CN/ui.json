@@ -31,6 +31,7 @@
   },
   "captcha": {
     "title": "请完成安全验证",
+    "loading": "正在加载验证码...",
     "sliderSuccessText": "验证通过",
     "sliderDefaultText": "请按住滑块拖动",
     "sliderRotateDefaultTip": "点击图片可刷新",
